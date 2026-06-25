@@ -1,6 +1,19 @@
 # Flujo IDE
 
-A mobile code editor for Android with AI assistant integration and MCP (Model Context Protocol) support. Built with React Native and Expo, CodePilot brings the power of modern desktop editors to your mobile device.
+A mobile code editor for Android with AI assistant integration and MCP (Model Context Protocol) support. Built with React Native and Expo, Flujo IDE brings the power of modern desktop editors to your mobile device.
+
+## Download APK
+
+[![Build Android APK](https://github.com/flujopy2025-beep/flujo.ide/actions/workflows/build-android.yml/badge.svg)](https://github.com/flujopy2025-beep/flujo.ide/actions/workflows/build-android.yml)
+
+**[Download latest APK from Releases](https://github.com/flujopy2025-beep/flujo.ide/releases/latest)**
+
+### How to install on Android:
+1. Download `flujo-ide.apk` from the latest release
+2. Open the file on your Android phone
+3. Allow "Install from unknown sources" if prompted
+4. Tap "Install"
+5. Open Flujo IDE from your app drawer
 
 ## Features
 

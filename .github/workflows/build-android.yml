@@ -1,0 +1,97 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Expo CLI
+        run: npm install -g expo-cli @expo/ngrok
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Setup Expo project for local build
+        run: npx expo prebuild --platform android --clean
+
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      - name: Build APK
+        run: |
+          cd android
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Rename APK
+        run: |
+          mv android/app/build/outputs/apk/release/app-release.apk android/app/build/outputs/apk/release/flujo-ide.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flujo-ide-apk
+          path: android/app/build/outputs/apk/release/flujo-ide.apk
+          retention-days: 90
+
+      - name: Get version
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Create Release (on main push only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}-build.${{ github.run_number }}
+          name: Flujo IDE v${{ steps.version.outputs.version }} (Build ${{ github.run_number }})
+          body: |
+            ## Flujo IDE - Android APK
+            
+            ### Download
+            Download `flujo-ide.apk` below and install on your Android device.
+            
+            ### How to install
+            1. Download the APK file on your Android phone
+            2. Open the file (you may need to allow "Install from unknown sources" in Settings)
+            3. Tap "Install"
+            4. Open Flujo IDE from your app drawer
+            
+            ### What's included
+            - Code editor with syntax highlighting (15+ languages)
+            - AI Chat (OpenAI, Claude, Gemini) - bring your own API key
+            - MCP (Model Context Protocol) client
+            - File manager with tree view
+            - Dark/Light themes
+            
+            ### Requirements
+            - Android 6.0 (API 23) or higher
+          files: android/app/build/outputs/apk/release/flujo-ide.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
