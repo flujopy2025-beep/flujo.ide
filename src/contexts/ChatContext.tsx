@@ -191,6 +191,9 @@ export function ChatProvider({ children }: ChatProviderProps) {
       setMessages((prev) => [...prev, userMessage]);
       setIsLoading(true);
 
+      // Create a unique ID for the assistant response (used in both try and catch)
+      const assistantMessageId = (Date.now() + 1).toString();
+
       try {
         // Ensure correct baseUrl for OpenRouter even if not stored properly
         let baseUrl = providerConfig.baseUrl;
@@ -211,37 +214,32 @@ export function ChatProvider({ children }: ChatProviderProps) {
           mcpTools
         );
 
-        // Use streaming for a better UX
-        const assistantMessageId = (Date.now() + 1).toString();
-        let accumulatedContent = '';
+        // Use non-streaming request (React Native does not support ReadableStream)
 
-        // Add a placeholder assistant message
+        // Add a placeholder assistant message with loading indicator
         const assistantMessage: Message = {
           id: assistantMessageId,
           role: 'assistant',
-          content: '',
+          content: '...',
           timestamp: Date.now(),
           provider: selectedProvider,
           model: selectedModel,
         };
         setMessages((prev) => [...prev, assistantMessage]);
 
-        await llmService.current.streamMessage(
+        const response = await llmService.current.sendMessage(
           userMessage.content,
           config,
-          (chunk) => {
-            if (chunk.content) {
-              accumulatedContent += chunk.content;
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantMessageId
-                    ? { ...m, content: accumulatedContent }
-                    : m
-                )
-              );
-            }
-          },
           systemPrompt
+        );
+
+        // Update the placeholder with the real response
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMessageId
+              ? { ...m, content: response.content }
+              : m
+          )
         );
 
         // Save chat history
@@ -267,10 +265,10 @@ export function ChatProvider({ children }: ChatProviderProps) {
         }
         setError(errorMessage);
 
-        // Remove the empty assistant message on error
+        // Remove the placeholder assistant message on error
         setMessages((prev) => {
           const filtered = prev.filter(
-            (m) => !(m.role === 'assistant' && m.content === '')
+            (m) => m.id !== assistantMessageId
           );
           return filtered;
         });
