@@ -192,11 +192,17 @@ export function ChatProvider({ children }: ChatProviderProps) {
       setIsLoading(true);
 
       try {
+        // Ensure correct baseUrl for OpenRouter even if not stored properly
+        let baseUrl = providerConfig.baseUrl;
+        if (selectedProvider === 'openrouter' && !baseUrl) {
+          baseUrl = 'https://openrouter.ai/api/v1';
+        }
+
         const config: LLMConfig = {
           provider: selectedProvider as LLMConfig['provider'],
           model: selectedModel,
           apiKey: providerConfig.apiKey,
-          baseUrl: providerConfig.baseUrl,
+          baseUrl,
         };
 
         const systemPrompt = buildSystemPrompt(

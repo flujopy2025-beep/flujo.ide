@@ -13,12 +13,19 @@ export class OpenAIAdapter implements LLMAdapter {
     const baseUrl = config.baseUrl || DEFAULT_BASE_URL;
     const url = `${baseUrl}/chat/completions`;
 
+    // Build headers - add OpenRouter-specific headers when using their API
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${config.apiKey}`,
+    };
+    if (baseUrl.includes('openrouter.ai')) {
+      headers['HTTP-Referer'] = 'https://github.com/flujopy2025-beep/flujo.ide';
+      headers['X-Title'] = 'Flujo IDE';
+    }
+
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.apiKey}`,
-      },
+      headers,
       body: JSON.stringify({
         model: config.model,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
@@ -29,7 +36,7 @@ export class OpenAIAdapter implements LLMAdapter {
 
     if (!response.ok) {
       const errorBody = await response.text();
-      throw new Error(`OpenAI API error (${response.status}): ${errorBody}`);
+      throw new Error(`API error (${response.status}) [${baseUrl}]: ${errorBody}`);
     }
 
     const data = await response.json();
@@ -57,12 +64,19 @@ export class OpenAIAdapter implements LLMAdapter {
     const baseUrl = config.baseUrl || DEFAULT_BASE_URL;
     const url = `${baseUrl}/chat/completions`;
 
+    // Build headers - add OpenRouter-specific headers when using their API
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${config.apiKey}`,
+    };
+    if (baseUrl.includes('openrouter.ai')) {
+      headers['HTTP-Referer'] = 'https://github.com/flujopy2025-beep/flujo.ide';
+      headers['X-Title'] = 'Flujo IDE';
+    }
+
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.apiKey}`,
-      },
+      headers,
       body: JSON.stringify({
         model: config.model,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
@@ -74,7 +88,7 @@ export class OpenAIAdapter implements LLMAdapter {
 
     if (!response.ok) {
       const errorBody = await response.text();
-      throw new Error(`OpenAI API error (${response.status}): ${errorBody}`);
+      throw new Error(`API error (${response.status}) [${baseUrl}]: ${errorBody}`);
     }
 
     const reader = response.body?.getReader();
