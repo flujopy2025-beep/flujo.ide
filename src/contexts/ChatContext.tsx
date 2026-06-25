@@ -1,7 +1,7 @@
 /**
  * ChatContext - Manages chat state including messages, conversation,
  * loading state, provider/model selection, and actions.
- * Supports tool use messages (tool calls from LLM and tool results).
+ * Simplified for SEO assistant use case (no MCP/agent tools).
  */
 
 import React, {
@@ -14,13 +14,11 @@ import React, {
   useRef,
   ReactNode,
 } from 'react';
-import { Message, ToolCallInfo, ToolResultInfo } from '../types';
-import { getLLMService, LLMConfig } from '../services/llm';
+import { Message } from '../types';
+import { getLLMService, LLMConfig, LLMMessage } from '../services/llm';
 import { getStorageService } from '../services/StorageService';
 import { SettingsContext } from './SettingsContext';
-import { MCPContext } from './MCPContext';
-import { runAgentLoop } from '../services/llm/AgentService';
-import { OpenAIMessage } from '../services/llm/OpenAIAdapter';
+import { OpenAIAdapter } from '../services/llm/OpenAIAdapter';
 
 export interface ChatContextValue {
   messages: Message[];
@@ -30,13 +28,9 @@ export interface ChatContextValue {
   selectedModel: string;
   setSelectedProvider: (provider: string) => void;
   setSelectedModel: (model: string) => void;
-  sendMessage: (content: string, fileContext?: string) => Promise<void>;
+  sendMessage: (content: string) => Promise<void>;
   clearConversation: () => void;
   availableModels: string[];
-  /** Add a tool call message (assistant made tool calls) */
-  addToolCallMessage: (toolCalls: ToolCallInfo[]) => void;
-  /** Add a tool result message */
-  addToolResultMessage: (toolCallId: string, toolName: string, result: string, isError: boolean) => void;
 }
 
 export const ChatContext = createContext<ChatContextValue>({
@@ -50,8 +44,6 @@ export const ChatContext = createContext<ChatContextValue>({
   sendMessage: async () => {},
   clearConversation: () => {},
   availableModels: [],
-  addToolCallMessage: () => {},
-  addToolResultMessage: () => {},
 });
 
 interface ChatProviderProps {
@@ -61,6 +53,8 @@ interface ChatProviderProps {
 /** Maximum number of messages to persist in AsyncStorage to avoid hitting size limits. */
 const MAX_PERSISTED_MESSAGES = 200;
 
+const SEO_SYSTEM_PROMPT = `You are Flujo, an AI SEO assistant. Help users analyze websites, improve their search rankings, fix SEO issues, and create content strategies. You can give specific recommendations based on audit results. Be practical and actionable.`;
+
 export function ChatProvider({ children }: ChatProviderProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -68,18 +62,16 @@ export function ChatProvider({ children }: ChatProviderProps) {
   const [selectedProvider, setSelectedProvider] = useState<string>('openai');
   const [selectedModel, setSelectedModel] = useState<string>('gpt-4o');
   const { settings } = useContext(SettingsContext);
-  const { tools: mcpTools, callToolByName } = useContext(MCPContext);
   const llmService = useRef(getLLMService());
   const storage = useRef(getStorageService());
 
   /**
    * Persist chat history with a cap to prevent exceeding AsyncStorage size limits.
-   * Only the most recent messages are kept.
    */
-  const persistChatHistory = useCallback((messages: Message[]) => {
-    const trimmed = messages.length > MAX_PERSISTED_MESSAGES
-      ? messages.slice(-MAX_PERSISTED_MESSAGES)
-      : messages;
+  const persistChatHistory = useCallback((msgs: Message[]) => {
+    const trimmed = msgs.length > MAX_PERSISTED_MESSAGES
+      ? msgs.slice(-MAX_PERSISTED_MESSAGES)
+      : msgs;
     storage.current.saveChatHistory(trimmed);
   }, []);
 
@@ -130,11 +122,9 @@ export function ChatProvider({ children }: ChatProviderProps) {
     );
 
     if (!currentProviderConfig) {
-      // Find first provider with a key
       const firstConfigured = settings.llmProviders.find((p) => p.apiKey);
       if (firstConfigured) {
         setSelectedProvider(firstConfigured.type);
-        // Set the first model for that provider
         const providerInfo = llmService.current.getProviders().find((p) => p.id === firstConfigured.type);
         if (providerInfo && providerInfo.models.length > 0) {
           setSelectedModel(providerInfo.models[0]);
@@ -143,25 +133,8 @@ export function ChatProvider({ children }: ChatProviderProps) {
     }
   }, [settings.llmProviders, selectedProvider]);
 
-  /**
-   * Build the agentic system prompt for the AI coding assistant.
-   */
-  const buildSystemPrompt = useCallback((): string => {
-    return `You are Flujo IDE, an AI coding assistant running on mobile. You have access to the user's workspace files. You can read, write, create, and search files. When the user asks you to create, modify, or explain code, use your tools to interact with their project directly. Be proactive - if the user asks to create a component, actually create the file. If they ask to fix a bug, read the file first, then write the fix.
-
-Available tools:
-- read_file: Read file contents from the workspace
-- write_file: Write/overwrite file contents
-- create_file: Create a new file
-- delete_file: Delete a file
-- list_files: List directory contents
-- search_files: Search for text across files
-
-Always use tools when file operations are needed. Do not just describe what to do - actually do it.`;
-  }, []);
-
   const sendMessage = useCallback(
-    async (content: string, fileContext?: string) => {
+    async (content: string) => {
       setError(null);
 
       // Find the API key for the selected provider
@@ -178,7 +151,7 @@ Always use tools when file operations are needed. Do not just describe what to d
       const userMessage: Message = {
         id: Date.now().toString(),
         role: 'user',
-        content: fileContext ? `[File Context]\n${fileContext}\n\n${content}` : content,
+        content,
         timestamp: Date.now(),
         provider: selectedProvider,
         model: selectedModel,
@@ -187,11 +160,10 @@ Always use tools when file operations are needed. Do not just describe what to d
       setMessages((prev) => [...prev, userMessage]);
       setIsLoading(true);
 
-      // Create a unique ID for the assistant response
       const assistantMessageId = (Date.now() + 1).toString();
 
       try {
-        // Ensure correct baseUrl for OpenRouter even if not stored properly
+        // Ensure correct baseUrl for OpenRouter
         let baseUrl = providerConfig.baseUrl;
         if (selectedProvider === 'openrouter' && !baseUrl) {
           baseUrl = 'https://openrouter.ai/api/v1';
@@ -204,90 +176,49 @@ Always use tools when file operations are needed. Do not just describe what to d
           baseUrl,
         };
 
-        const systemPrompt = buildSystemPrompt();
-
-        // Build conversation history in OpenAI message format (excluding current message)
-        const conversationHistory: OpenAIMessage[] = messages
+        // Build conversation history for context
+        const conversationHistory: LLMMessage[] = messages
           .filter((m) => m.role === 'user' || m.role === 'assistant')
-          .slice(-20) // Keep last 20 messages for context window
+          .slice(-20)
           .map((m) => ({
             role: m.role as 'user' | 'assistant',
             content: m.content,
           }));
 
-        // Add a placeholder assistant message with loading indicator
+        // Use the OpenAI adapter directly for simple non-streaming call
+        const adapter = new OpenAIAdapter();
+        const allMessages: LLMMessage[] = [
+          { role: 'system', content: SEO_SYSTEM_PROMPT },
+          ...conversationHistory,
+          { role: 'user', content },
+        ];
+
+        const response = await adapter.sendMessage(allMessages, config);
+
+        // Create assistant message
         const assistantMessage: Message = {
           id: assistantMessageId,
           role: 'assistant',
-          content: '...',
+          content: response.content,
           timestamp: Date.now(),
           provider: selectedProvider,
-          model: selectedModel,
+          model: response.model || selectedModel,
         };
-        setMessages((prev) => [...prev, assistantMessage]);
 
-        // Run the agent loop
-        const result = await runAgentLoop({
-          userMessage: userMessage.content,
-          systemPrompt,
-          config,
-          conversationHistory,
-          mcpTools,
-          callMCPTool: callToolByName,
-          onProgress: {
-            onToolCall: (toolName: string, args: Record<string, unknown>) => {
-              // Add a tool call message to show progress
-              const tcMessage: Message = {
-                id: `tc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                role: 'assistant',
-                content: `Using tool: ${toolName}`,
-                timestamp: Date.now(),
-                toolCalls: [{ id: `call-${Date.now()}`, name: toolName, arguments: args }],
-              };
-              setMessages((prev) => [...prev, tcMessage]);
-            },
-            onToolResult: (toolName: string, resultContent: string, isError: boolean) => {
-              // Add a tool result message
-              const trMessage: Message = {
-                id: `tr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                role: 'tool',
-                content: resultContent.slice(0, 500) + (resultContent.length > 500 ? '\n...(truncated)' : ''),
-                timestamp: Date.now(),
-                toolResult: {
-                  toolCallId: `call-${Date.now()}`,
-                  toolName,
-                  isError,
-                },
-              };
-              setMessages((prev) => [...prev, trMessage]);
-            },
-          },
-        });
-
-        // Update the placeholder with the real response
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMessageId
-              ? { ...m, content: result.content, model: result.model }
-              : m
-          )
-        );
-
-        // Update LLM service history for non-agent fallback compatibility
-        llmService.current.addToHistory({ role: 'user', content: userMessage.content });
-        llmService.current.addToHistory({ role: 'assistant', content: result.content });
-
-        // Save chat history
         setMessages((prev) => {
-          persistChatHistory(prev);
-          return prev;
+          const updated = [...prev, assistantMessage];
+          persistChatHistory(updated);
+          return updated;
         });
+
+        // Update LLM service history
+        llmService.current.addToHistory({ role: 'user', content });
+        llmService.current.addToHistory({ role: 'assistant', content: response.content });
       } catch (err) {
         let errorMessage = 'An error occurred while sending the message';
         if (err instanceof Error) {
-          // Make error messages more user-friendly
           if (err.message.includes('404')) {
-            errorMessage = `Model not found (404). The model "${selectedModel}" may not be available. Try selecting a different model.`;
+            errorMessage = `Model not found (404). The model "${selectedModel}" may not be available. Try a different model.`;
           } else if (err.message.includes('401')) {
             errorMessage = 'Invalid API key (401). Please check your key in Settings.';
           } else if (err.message.includes('429')) {
@@ -299,57 +230,11 @@ Always use tools when file operations are needed. Do not just describe what to d
           }
         }
         setError(errorMessage);
-
-        // Remove the placeholder assistant message on error
-        setMessages((prev) => {
-          const filtered = prev.filter(
-            (m) => m.id !== assistantMessageId
-          );
-          return filtered;
-        });
       } finally {
         setIsLoading(false);
       }
     },
-    [selectedProvider, selectedModel, settings.llmProviders, mcpTools, callToolByName, buildSystemPrompt, persistChatHistory, messages]
-  );
-
-  const addToolCallMessage = useCallback((toolCalls: ToolCallInfo[]) => {
-    const toolCallNames = toolCalls.map((tc) => tc.name).join(', ');
-    const message: Message = {
-      id: `tool-call-${Date.now()}`,
-      role: 'assistant',
-      content: `Using tools: ${toolCallNames}`,
-      timestamp: Date.now(),
-      toolCalls,
-    };
-    setMessages((prev) => {
-      const updated = [...prev, message];
-      persistChatHistory(updated);
-      return updated;
-    });
-  }, [persistChatHistory]);
-
-  const addToolResultMessage = useCallback(
-    (toolCallId: string, toolName: string, result: string, isError: boolean) => {
-      const message: Message = {
-        id: `tool-result-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        role: 'tool',
-        content: result,
-        timestamp: Date.now(),
-        toolResult: {
-          toolCallId,
-          toolName,
-          isError,
-        },
-      };
-      setMessages((prev) => {
-        const updated = [...prev, message];
-        persistChatHistory(updated);
-        return updated;
-      });
-    },
-    [persistChatHistory]
+    [selectedProvider, selectedModel, settings.llmProviders, persistChatHistory, messages]
   );
 
   const clearConversation = useCallback(() => {
@@ -371,8 +256,6 @@ Always use tools when file operations are needed. Do not just describe what to d
       sendMessage,
       clearConversation,
       availableModels,
-      addToolCallMessage,
-      addToolResultMessage,
     }),
     [
       messages,
@@ -384,8 +267,6 @@ Always use tools when file operations are needed. Do not just describe what to d
       sendMessage,
       clearConversation,
       availableModels,
-      addToolCallMessage,
-      addToolResultMessage,
     ]
   );
 

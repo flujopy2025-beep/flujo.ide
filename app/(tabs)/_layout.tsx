@@ -36,20 +36,11 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="editor"
+        name="audit"
         options={{
-          title: 'Editor',
+          title: 'Audit',
           tabBarIcon: ({ color, size }: TabBarIconProps) => (
-            <Ionicons name={'code-slash' as IoniconsName} size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="files"
-        options={{
-          title: 'Files',
-          tabBarIcon: ({ color, size }: TabBarIconProps) => (
-            <Ionicons name={'folder-outline' as IoniconsName} size={size} color={color} />
+            <Ionicons name={'search-outline' as IoniconsName} size={size} color={color} />
           ),
         }}
       />
@@ -58,16 +49,7 @@ export default function TabLayout() {
         options={{
           title: 'Chat',
           tabBarIcon: ({ color, size }: TabBarIconProps) => (
-            <Ionicons name={'chatbubble-ellipses-outline' as IoniconsName} size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="mcp"
-        options={{
-          title: 'MCP',
-          tabBarIcon: ({ color, size }: TabBarIconProps) => (
-            <Ionicons name={'git-network-outline' as IoniconsName} size={size} color={color} />
+            <Ionicons name={'chatbubbles-outline' as IoniconsName} size={size} color={color} />
           ),
         }}
       />

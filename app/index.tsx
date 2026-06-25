@@ -1,6 +1,5 @@
 /**
  * Index/Entry screen - decides whether to show onboarding or go to tabs.
- * This is the proper way to handle conditional routing in expo-router.
  */
 
 import { useEffect, useState } from 'react';
@@ -17,13 +16,13 @@ export default function IndexScreen() {
       try {
         const value = await AsyncStorage.getItem('@flujo_onboarding_complete');
         if (value === 'true') {
-          router.replace('/(tabs)/editor');
+          router.replace('/(tabs)/audit');
         } else {
           router.replace('/onboarding');
         }
       } catch {
         // If storage fails, go to tabs directly
-        router.replace('/(tabs)/editor');
+        router.replace('/(tabs)/audit');
       } finally {
         setChecking(false);
       }

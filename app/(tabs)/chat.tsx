@@ -1,5 +1,5 @@
 /**
- * Chat Tab Screen - Full AI chat interface with model selector,
+ * Chat Tab Screen - AI SEO assistant chat interface with model selector,
  * scrollable message list, and input at bottom.
  */
 
@@ -49,7 +49,7 @@ export default function ChatScreen() {
             No API Keys Configured
           </Text>
           <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-            Add your OpenAI, Claude, or Gemini API key in Settings to start chatting with AI.
+            Add your OpenAI, Claude, Gemini, or OpenRouter API key in Settings to start chatting.
           </Text>
         </View>
       );
@@ -59,10 +59,10 @@ export default function ChatScreen() {
       <View style={styles.emptyState}>
         <Ionicons name="chatbubbles-outline" size={48} color={colors.textMuted} />
         <Text style={[styles.emptyTitle, { color: colors.text }]}>
-          Start a Conversation
+          SEO Assistant
         </Text>
         <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-          Ask Flujo IDE to create files, fix bugs, explain code, or work on your project. It can read, write, and search your workspace files directly.
+          Ask Flujo about SEO best practices, get recommendations for improving your search rankings, or discuss your audit results.
         </Text>
       </View>
     );

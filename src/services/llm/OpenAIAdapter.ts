@@ -5,7 +5,16 @@
  */
 
 import { LLMAdapter, LLMConfig, LLMMessage, LLMResponse, LLMStreamChunk } from './types';
-import { OpenAIToolDefinition } from './MCPToolIntegration';
+
+/** OpenAI function calling tool definition format */
+export interface OpenAIToolDefinition {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+}
 
 /** Response from a tool-enabled API call */
 export interface ToolCallResponse {

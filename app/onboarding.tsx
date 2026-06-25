@@ -71,7 +71,7 @@ export default function OnboardingScreen() {
     } catch {
       // Continue even if storage fails
     }
-    router.replace('/(tabs)/editor');
+    router.replace('/(tabs)/audit');
   };
 
   return (
@@ -92,21 +92,21 @@ export default function OnboardingScreen() {
         <View style={styles.glowLine} />
 
         {/* Subtitle */}
-        <Text style={styles.subtitle}>Mobile Code Editor with AI & MCP</Text>
+        <Text style={styles.subtitle}>Mobile SEO Audit & AI Assistant</Text>
 
         {/* Feature highlights */}
         <View style={styles.features}>
           <View style={styles.featureRow}>
             <View style={styles.featureDot} />
-            <Text style={styles.featureText}>CodeMirror 6 Editor</Text>
+            <Text style={styles.featureText}>Instant SEO Audit for any URL</Text>
           </View>
           <View style={styles.featureRow}>
             <View style={styles.featureDot} />
-            <Text style={styles.featureText}>AI Chat (OpenAI, Claude, Gemini, OpenRouter)</Text>
+            <Text style={styles.featureText}>AI-Powered SEO Recommendations</Text>
           </View>
           <View style={styles.featureRow}>
             <View style={styles.featureDot} />
-            <Text style={styles.featureText}>MCP Server Integration</Text>
+            <Text style={styles.featureText}>Meta Tags, Headings, Links Analysis</Text>
           </View>
         </View>
       </Animated.View>
