@@ -162,7 +162,7 @@ export default function OnboardingScreen() {
     } catch {
       // Continue even if storage fails
     }
-    router.replace('/(tabs)');
+    router.replace('/(tabs)/editor');
   };
 
   return (
