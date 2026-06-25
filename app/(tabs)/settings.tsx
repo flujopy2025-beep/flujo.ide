@@ -201,7 +201,7 @@ export default function SettingsScreen() {
       case 'openai': return 'GPT-4o, GPT-4o-mini, GPT-3.5';
       case 'anthropic': return 'Claude 3.5 Sonnet, Haiku, Opus';
       case 'google': return 'Gemini 1.5 Pro, Flash';
-      case 'openrouter': return 'Access 100+ models via one API';
+      case 'openrouter': return 'Free & paid models (Gemma, DeepSeek, Llama)';
       default: return '';
     }
   };
@@ -292,6 +292,33 @@ export default function SettingsScreen() {
                   />
                 </Pressable>
               </View>
+
+              {/* Save Button */}
+              <Pressable
+                style={[
+                  styles.saveButton,
+                  {
+                    backgroundColor: entry.key.trim() ? BRAND_CYAN : colors.surfaceHover,
+                    opacity: entry.key.trim() ? 1 : 0.5,
+                  },
+                ]}
+                onPress={() => handleSaveKey(entry.type, entry.key)}
+                disabled={!entry.key.trim()}
+              >
+                <Ionicons
+                  name="save-outline"
+                  size={16}
+                  color={entry.key.trim() ? '#0D1117' : colors.textMuted}
+                />
+                <Text
+                  style={[
+                    styles.saveButtonText,
+                    { color: entry.key.trim() ? '#0D1117' : colors.textMuted },
+                  ]}
+                >
+                  Save Key
+                </Text>
+              </Pressable>
 
               {entry.type === 'openrouter' && (
                 <Text style={[styles.providerNote, { color: colors.textMuted }]}>
@@ -518,6 +545,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 8,
     fontStyle: 'italic',
+  },
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 10,
+    gap: 6,
+  },
+  saveButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   statusBadge: {
     marginLeft: 8,

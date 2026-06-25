@@ -29,6 +29,11 @@ export const LLM_PROVIDERS: LLMProviderInfo[] = [
     id: 'openrouter',
     name: 'OpenRouter',
     models: [
+      'google/gemma-3-27b-it:free',
+      'deepseek/deepseek-chat-v3-0324:free',
+      'meta-llama/llama-4-maverick:free',
+      'microsoft/phi-4-reasoning:free',
+      'qwen/qwen3-235b-a22b:free',
       'openai/gpt-4o',
       'anthropic/claude-3.5-sonnet',
       'google/gemini-pro',
