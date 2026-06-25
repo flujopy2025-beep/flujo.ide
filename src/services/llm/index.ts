@@ -2,6 +2,13 @@ export { LLMService, getLLMService, LLM_PROVIDERS } from './LLMService';
 export { OpenAIAdapter } from './OpenAIAdapter';
 export { ClaudeAdapter } from './ClaudeAdapter';
 export { GeminiAdapter } from './GeminiAdapter';
+export { runAgentLoop } from './AgentService';
+export {
+  BUILT_IN_TOOLS,
+  formatBuiltInToolsForOpenAI,
+  isBuiltInTool,
+  executeBuiltInTool,
+} from './AgentTools';
 export {
   formatToolsForOpenAI,
   formatToolsForClaude,
@@ -27,3 +34,5 @@ export type {
   LLMToolCall,
   ToolCallResult,
 } from './MCPToolIntegration';
+export type { ToolCallResponse, OpenAIMessage } from './OpenAIAdapter';
+export type { AgentResult, AgentProgressCallback } from './AgentService';

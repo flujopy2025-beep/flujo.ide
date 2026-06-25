@@ -62,7 +62,7 @@ export default function ChatScreen() {
           Start a Conversation
         </Text>
         <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-          Ask Flujo IDE for help with coding, debugging, or explanations.
+          Ask Flujo IDE to create files, fix bugs, explain code, or work on your project. It can read, write, and search your workspace files directly.
         </Text>
       </View>
     );

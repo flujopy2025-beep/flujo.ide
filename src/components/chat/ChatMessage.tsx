@@ -1,10 +1,12 @@
 /**
  * ChatMessage - Renders a single chat message with basic markdown support.
  * User messages are right-aligned, AI messages left-aligned with avatar.
+ * Tool calls show with a wrench icon; tool results are collapsible.
  */
 
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { Message } from '../../types';
 
@@ -112,6 +114,7 @@ export default function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === 'user';
   const isTool = message.role === 'tool';
   const hasToolCalls = message.toolCalls && message.toolCalls.length > 0;
+  const [isResultExpanded, setIsResultExpanded] = useState(false);
 
   const segments = useMemo(() => parseMarkdown(message.content), [message.content]);
 
@@ -172,21 +175,23 @@ export default function ChatMessage({ message }: ChatMessageProps) {
     }
   };
 
-  // Render tool call message
+  // Render tool call message with wrench icon
   if (hasToolCalls) {
     return (
       <View style={[styles.container, styles.aiContainer]}>
         <View style={[styles.avatar, { backgroundColor: colors.warning }]}>
-          <Text style={styles.avatarText}>T</Text>
+          <Ionicons name="build-outline" size={14} color="#ffffff" />
         </View>
-        <View style={[styles.bubble, styles.toolBubble, { backgroundColor: colors.surface, borderColor: colors.warning + '60' }]}>
-          <Text style={[styles.toolLabel, { color: colors.warning }]}>Tool Calls</Text>
+        <View style={[styles.bubble, styles.toolBubble, { backgroundColor: colors.surface, borderColor: colors.warning + '40' }]}>
           {message.toolCalls!.map((tc) => (
-            <View key={tc.id} style={[styles.toolCallItem, { borderColor: colors.border }]}>
-              <Text style={[styles.toolCallName, { color: colors.primary }]}>{tc.name}</Text>
-              {Object.keys(tc.arguments).length > 0 && (
-                <Text style={[styles.toolCallArgs, { color: colors.textMuted }]}>
-                  {JSON.stringify(tc.arguments, null, 2)}
+            <View key={tc.id} style={styles.toolCallRow}>
+              <Ionicons name="build" size={12} color={colors.warning} style={styles.toolIcon} />
+              <Text style={[styles.toolCallLabel, { color: colors.text }]}>
+                {tc.name}
+              </Text>
+              {tc.arguments && Object.keys(tc.arguments).length > 0 && (
+                <Text style={[styles.toolCallPath, { color: colors.textMuted }]} numberOfLines={1}>
+                  {tc.arguments.path ? ` ${tc.arguments.path}` : ''}
                 </Text>
               )}
             </View>
@@ -196,31 +201,49 @@ export default function ChatMessage({ message }: ChatMessageProps) {
     );
   }
 
-  // Render tool result message
+  // Render tool result message (collapsed by default, expandable)
   if (isTool && message.toolResult) {
     const isError = message.toolResult.isError;
+    const iconName = isError ? 'close-circle' : 'checkmark-circle';
+    const iconColor = isError ? colors.error : colors.success;
+
     return (
       <View style={[styles.container, styles.aiContainer]}>
-        <View style={[styles.avatar, { backgroundColor: isError ? colors.error : colors.success }]}>
-          <Text style={styles.avatarText}>{isError ? '!' : '\u2713'}</Text>
+        <View style={[styles.avatar, { backgroundColor: iconColor }]}>
+          <Ionicons name={iconName} size={14} color="#ffffff" />
         </View>
-        <View
+        <Pressable
           style={[
             styles.bubble,
             styles.toolBubble,
             {
               backgroundColor: colors.surface,
-              borderColor: isError ? colors.error + '60' : colors.success + '60',
+              borderColor: iconColor + '40',
             },
           ]}
+          onPress={() => setIsResultExpanded(!isResultExpanded)}
         >
-          <Text style={[styles.toolLabel, { color: isError ? colors.error : colors.success }]}>
-            {isError ? 'Tool Error' : 'Tool Result'}: {message.toolResult.toolName}
-          </Text>
-          <Text style={[styles.toolResultContent, { color: colors.text }]}>
-            {message.content}
-          </Text>
-        </View>
+          <View style={styles.toolResultHeader}>
+            <Text style={[styles.toolResultLabel, { color: iconColor }]}>
+              {isError ? 'Error' : 'Result'}: {message.toolResult.toolName}
+            </Text>
+            <Ionicons
+              name={isResultExpanded ? 'chevron-up' : 'chevron-down'}
+              size={14}
+              color={colors.textMuted}
+            />
+          </View>
+          {isResultExpanded && (
+            <Text style={[styles.toolResultContent, { color: colors.text }]} selectable>
+              {message.content}
+            </Text>
+          )}
+          {!isResultExpanded && message.content.length > 0 && (
+            <Text style={[styles.toolResultPreview, { color: colors.textMuted }]} numberOfLines={1}>
+              {message.content.split('\n')[0]}
+            </Text>
+          )}
+        </Pressable>
       </View>
     );
   }
@@ -345,31 +368,44 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderBottomLeftRadius: 4,
   },
-  toolLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 6,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  toolCallRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 3,
   },
-  toolCallItem: {
-    borderTopWidth: 1,
-    paddingTop: 6,
-    marginTop: 4,
+  toolIcon: {
+    marginRight: 6,
   },
-  toolCallName: {
+  toolCallLabel: {
     fontSize: 13,
     fontWeight: '600',
     fontFamily: 'monospace',
   },
-  toolCallArgs: {
-    fontSize: 11,
+  toolCallPath: {
+    fontSize: 12,
     fontFamily: 'monospace',
-    marginTop: 4,
-    lineHeight: 16,
+    marginLeft: 4,
+    flex: 1,
+  },
+  toolResultHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  toolResultLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
   },
   toolResultContent: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: 'monospace',
+    marginTop: 6,
+  },
+  toolResultPreview: {
+    fontSize: 11,
+    marginTop: 4,
+    fontFamily: 'monospace',
   },
 });

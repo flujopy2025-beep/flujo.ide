@@ -19,8 +19,8 @@ import { getLLMService, LLMConfig } from '../services/llm';
 import { getStorageService } from '../services/StorageService';
 import { SettingsContext } from './SettingsContext';
 import { MCPContext } from './MCPContext';
-import { formatToolsForProvider } from '../services/llm/MCPToolIntegration';
-import { MCPTool } from '../services/mcp';
+import { runAgentLoop } from '../services/llm/AgentService';
+import { OpenAIMessage } from '../services/llm/OpenAIAdapter';
 
 export interface ChatContextValue {
   messages: Message[];
@@ -68,7 +68,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
   const [selectedProvider, setSelectedProvider] = useState<string>('openai');
   const [selectedModel, setSelectedModel] = useState<string>('gpt-4o');
   const { settings } = useContext(SettingsContext);
-  const { tools: mcpTools } = useContext(MCPContext);
+  const { tools: mcpTools, callToolByName } = useContext(MCPContext);
   const llmService = useRef(getLLMService());
   const storage = useRef(getStorageService());
 
@@ -144,25 +144,21 @@ export function ChatProvider({ children }: ChatProviderProps) {
   }, [settings.llmProviders, selectedProvider]);
 
   /**
-   * Build a system prompt that includes MCP tool descriptions when tools are available.
-   * This makes the LLM aware of connected MCP tools so it can reference them.
+   * Build the agentic system prompt for the AI coding assistant.
    */
-  const buildSystemPrompt = useCallback(
-    (basePrompt: string, provider: string, tools: MCPTool[]): string => {
-      if (tools.length === 0) return basePrompt;
+  const buildSystemPrompt = useCallback((): string => {
+    return `You are Flujo IDE, an AI coding assistant running on mobile. You have access to the user's workspace files. You can read, write, create, and search files. When the user asks you to create, modify, or explain code, use your tools to interact with their project directly. Be proactive - if the user asks to create a component, actually create the file. If they ask to fix a bug, read the file first, then write the fix.
 
-      const formattedTools = formatToolsForProvider(
-        tools,
-        provider as 'openai' | 'anthropic' | 'google'
-      );
-      const toolDescriptions = tools
-        .map((t) => `- ${t.name}: ${t.description || 'No description'}`)
-        .join('\n');
+Available tools:
+- read_file: Read file contents from the workspace
+- write_file: Write/overwrite file contents
+- create_file: Create a new file
+- delete_file: Delete a file
+- list_files: List directory contents
+- search_files: Search for text across files
 
-      return `${basePrompt}\n\nYou have access to the following MCP tools from connected servers. Mention them when relevant:\n${toolDescriptions}\n\n(Tool definitions: ${JSON.stringify(formattedTools).slice(0, 2000)})`;
-    },
-    []
-  );
+Always use tools when file operations are needed. Do not just describe what to do - actually do it.`;
+  }, []);
 
   const sendMessage = useCallback(
     async (content: string, fileContext?: string) => {
@@ -191,7 +187,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
       setMessages((prev) => [...prev, userMessage]);
       setIsLoading(true);
 
-      // Create a unique ID for the assistant response (used in both try and catch)
+      // Create a unique ID for the assistant response
       const assistantMessageId = (Date.now() + 1).toString();
 
       try {
@@ -208,13 +204,16 @@ export function ChatProvider({ children }: ChatProviderProps) {
           baseUrl,
         };
 
-        const systemPrompt = buildSystemPrompt(
-          'You are Flujo IDE, an AI coding assistant in a mobile code editor. Help with coding questions, explain code, suggest improvements, and assist with debugging. Be concise and provide code examples when relevant.',
-          selectedProvider,
-          mcpTools
-        );
+        const systemPrompt = buildSystemPrompt();
 
-        // Use non-streaming request (React Native does not support ReadableStream)
+        // Build conversation history in OpenAI message format (excluding current message)
+        const conversationHistory: OpenAIMessage[] = messages
+          .filter((m) => m.role === 'user' || m.role === 'assistant')
+          .slice(-20) // Keep last 20 messages for context window
+          .map((m) => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+          }));
 
         // Add a placeholder assistant message with loading indicator
         const assistantMessage: Message = {
@@ -227,20 +226,56 @@ export function ChatProvider({ children }: ChatProviderProps) {
         };
         setMessages((prev) => [...prev, assistantMessage]);
 
-        const response = await llmService.current.sendMessage(
-          userMessage.content,
+        // Run the agent loop
+        const result = await runAgentLoop({
+          userMessage: userMessage.content,
+          systemPrompt,
           config,
-          systemPrompt
-        );
+          conversationHistory,
+          mcpTools,
+          callMCPTool: callToolByName,
+          onProgress: {
+            onToolCall: (toolName: string, args: Record<string, unknown>) => {
+              // Add a tool call message to show progress
+              const tcMessage: Message = {
+                id: `tc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                role: 'assistant',
+                content: `Using tool: ${toolName}`,
+                timestamp: Date.now(),
+                toolCalls: [{ id: `call-${Date.now()}`, name: toolName, arguments: args }],
+              };
+              setMessages((prev) => [...prev, tcMessage]);
+            },
+            onToolResult: (toolName: string, resultContent: string, isError: boolean) => {
+              // Add a tool result message
+              const trMessage: Message = {
+                id: `tr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                role: 'tool',
+                content: resultContent.slice(0, 500) + (resultContent.length > 500 ? '\n...(truncated)' : ''),
+                timestamp: Date.now(),
+                toolResult: {
+                  toolCallId: `call-${Date.now()}`,
+                  toolName,
+                  isError,
+                },
+              };
+              setMessages((prev) => [...prev, trMessage]);
+            },
+          },
+        });
 
         // Update the placeholder with the real response
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMessageId
-              ? { ...m, content: response.content }
+              ? { ...m, content: result.content, model: result.model }
               : m
           )
         );
+
+        // Update LLM service history for non-agent fallback compatibility
+        llmService.current.addToHistory({ role: 'user', content: userMessage.content });
+        llmService.current.addToHistory({ role: 'assistant', content: result.content });
 
         // Save chat history
         setMessages((prev) => {
@@ -272,17 +307,11 @@ export function ChatProvider({ children }: ChatProviderProps) {
           );
           return filtered;
         });
-
-        // Also remove from LLM service history (the last user+assistant pair)
-        const history = llmService.current.getConversationHistory();
-        if (history.length >= 2) {
-          llmService.current.setHistory(history.slice(0, -2));
-        }
       } finally {
         setIsLoading(false);
       }
     },
-    [selectedProvider, selectedModel, settings.llmProviders, mcpTools, buildSystemPrompt, persistChatHistory]
+    [selectedProvider, selectedModel, settings.llmProviders, mcpTools, callToolByName, buildSystemPrompt, persistChatHistory, messages]
   );
 
   const addToolCallMessage = useCallback((toolCalls: ToolCallInfo[]) => {
