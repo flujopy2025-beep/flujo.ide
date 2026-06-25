@@ -22,7 +22,7 @@ export class MCPClient {
   private config: MCPServerConfig;
   private state: MCPConnectionState = 'disconnected';
   private messageEndpoint: string | null = null;
-  private abortController: AbortController | null = null;
+  private sseXhr: XMLHttpRequest | null = null;
   private requestId = 0;
   private pendingRequests: Map<
     number | string,
@@ -82,8 +82,10 @@ export class MCPClient {
     }
 
     // Abort any existing connection before starting a new one
-    this.abortController?.abort();
-    this.abortController = new AbortController();
+    if (this.sseXhr) {
+      this.sseXhr.abort();
+      this.sseXhr = null;
+    }
 
     this.setState('connecting');
 
@@ -121,8 +123,8 @@ export class MCPClient {
       }, 30000);
 
       try {
-        // In React Native, EventSource may not be available natively.
-        // We use a polling-based approach or fetch-based SSE reader.
+        // Use XMLHttpRequest-based SSE since React Native does not support
+        // ReadableStream (response.body.getReader()).
         this.connectSSE(sseUrl, resolve, reject, timeout);
       } catch (err) {
         clearTimeout(timeout);
@@ -132,8 +134,9 @@ export class MCPClient {
   }
 
   /**
-   * Connect to SSE using fetch-based streaming.
-   * React Native does not have native EventSource, so we use fetch with streaming.
+   * Connect to SSE using XMLHttpRequest-based streaming.
+   * React Native does not support response.body.getReader() (ReadableStream API),
+   * so we use XMLHttpRequest with progressive responseText reading instead.
    */
   private connectSSE(
     url: string,
@@ -141,85 +144,83 @@ export class MCPClient {
     reject: (err: Error) => void,
     timeout: ReturnType<typeof setTimeout>
   ): void {
-    const headers: Record<string, string> = {
-      Accept: 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      ...this.config.headers,
+    const xhr = new XMLHttpRequest();
+    this.sseXhr = xhr;
+    let lastIndex = 0;
+    let buffer = '';
+    let endpointReceived = false;
+
+    xhr.open('GET', url, true);
+    xhr.setRequestHeader('Accept', 'text/event-stream');
+    xhr.setRequestHeader('Cache-Control', 'no-cache');
+
+    // Apply any custom headers from config
+    if (this.config.headers) {
+      for (const [key, value] of Object.entries(this.config.headers)) {
+        xhr.setRequestHeader(key, value);
+      }
+    }
+
+    xhr.onprogress = () => {
+      const newData = xhr.responseText.substring(lastIndex);
+      lastIndex = xhr.responseText.length;
+
+      buffer += newData;
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      let eventType = '';
+      let eventData = '';
+
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          eventType = line.slice(7).trim();
+        } else if (line.startsWith('data: ')) {
+          eventData = line.slice(6).trim();
+        } else if (line === '' && eventData) {
+          // End of event
+          this.handleSSEEvent(eventType, eventData);
+
+          if (eventType === 'endpoint' && !endpointReceived) {
+            // The endpoint event contains the URL to POST messages to
+            this.messageEndpoint = this.resolveEndpointUrl(eventData);
+            endpointReceived = true;
+            clearTimeout(timeout);
+            resolve();
+          }
+
+          eventType = '';
+          eventData = '';
+        }
+      }
     };
 
-    fetch(url, { headers, method: 'GET', signal: this.abortController?.signal })
-      .then(async (response) => {
-        if (!response.ok) {
+    xhr.onerror = () => {
+      clearTimeout(timeout);
+      reject(new Error('SSE connection failed: network error'));
+    };
+
+    xhr.onreadystatechange = () => {
+      if (xhr.readyState === XMLHttpRequest.HEADERS_RECEIVED) {
+        if (xhr.status !== 200) {
           clearTimeout(timeout);
-          reject(new Error(`SSE connection failed: ${response.status} ${response.statusText}`));
-          return;
+          reject(new Error(`SSE connection failed: ${xhr.status} ${xhr.statusText}`));
+          xhr.abort();
         }
-
-        if (!response.body) {
-          clearTimeout(timeout);
-          reject(new Error('No response body for SSE stream'));
-          return;
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let endpointReceived = false;
-
-        const processStream = async (): Promise<void> => {
-          try {
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-
-              buffer += decoder.decode(value, { stream: true });
-              const lines = buffer.split('\n');
-              buffer = lines.pop() || '';
-
-              let eventType = '';
-              let eventData = '';
-
-              for (const line of lines) {
-                if (line.startsWith('event: ')) {
-                  eventType = line.slice(7).trim();
-                } else if (line.startsWith('data: ')) {
-                  eventData = line.slice(6).trim();
-                } else if (line === '' && eventData) {
-                  // End of event
-                  this.handleSSEEvent(eventType, eventData);
-
-                  if (eventType === 'endpoint' && !endpointReceived) {
-                    // The endpoint event contains the URL to POST messages to
-                    this.messageEndpoint = this.resolveEndpointUrl(eventData);
-                    endpointReceived = true;
-                    clearTimeout(timeout);
-                    resolve();
-                  }
-
-                  eventType = '';
-                  eventData = '';
-                }
-              }
-            }
-          } catch (err) {
-            if (this.state === 'connected' || this.state === 'connecting') {
-              // Ignore AbortError since it is triggered intentionally on disconnect
-              if (err instanceof Error && err.name === 'AbortError') {
-                return;
-              }
-              const errorMsg = err instanceof Error ? err.message : 'SSE stream error';
-              this.setState('error', errorMsg);
-            }
+      } else if (xhr.readyState === XMLHttpRequest.DONE) {
+        // Stream ended
+        if (this.state === 'connected' || this.state === 'connecting') {
+          if (!endpointReceived) {
+            clearTimeout(timeout);
+            reject(new Error('SSE stream closed before receiving endpoint'));
+          } else {
+            this.setState('error', 'SSE stream closed unexpectedly');
           }
-        };
+        }
+      }
+    };
 
-        // Process stream in background
-        processStream();
-      })
-      .catch((err) => {
-        clearTimeout(timeout);
-        reject(err instanceof Error ? err : new Error('SSE connection failed'));
-      });
+    xhr.send();
   }
 
   /**
@@ -444,10 +445,10 @@ export class MCPClient {
       this.pendingRequests.delete(id);
     }
 
-    // Abort the SSE fetch stream
-    if (this.abortController) {
-      this.abortController.abort();
-      this.abortController = null;
+    // Abort the SSE XMLHttpRequest connection
+    if (this.sseXhr) {
+      this.sseXhr.abort();
+      this.sseXhr = null;
     }
 
     this.messageEndpoint = null;

@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, Text } from 'react-native';
 import { WebView } from 'react-native-webview';
 import type { WebViewMessageEvent } from 'react-native-webview';
 import { useTheme } from '../../hooks/useTheme';
@@ -108,6 +108,13 @@ const EDITOR_HTML = `<!DOCTYPE html>
           break;
         case 'undo': if (editor) undoCmd(editor); break;
         case 'redo': if (editor) redoCmd(editor); break;
+        case 'insertText':
+          if (editor) {
+            const cursor = editor.state.selection.main.head;
+            editor.dispatch({ changes: { from: cursor, to: cursor, insert: data.text } });
+            editor.focus();
+          }
+          break;
         default: break;
       }
     };
@@ -131,6 +138,7 @@ export interface CodeMirrorWebViewHandle {
   setLanguage: (language: string) => void;
   undo: () => void;
   redo: () => void;
+  insertText: (text: string) => void;
 }
 
 interface CodeMirrorWebViewProps {
@@ -138,10 +146,15 @@ interface CodeMirrorWebViewProps {
   onEditorReady?: () => void;
   initialContent?: string;
   language?: string;
+  showQuickInsert?: boolean;
 }
 
+const QUICK_INSERT_KEYS = [
+  'Tab', '{', '}', '(', ')', '[', ']', ';', ':', "'", '"', '<', '>', '/', '=', '!', '&', '|', '.',
+];
+
 export const CodeMirrorWebView = forwardRef<CodeMirrorWebViewHandle, CodeMirrorWebViewProps>(
-  ({ onContentChange, onEditorReady, initialContent, language }, ref) => {
+  ({ onContentChange, onEditorReady, initialContent, language, showQuickInsert = true }, ref) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const webViewRef = useRef<any>(null);
     const { theme } = useTheme();
@@ -172,6 +185,9 @@ export const CodeMirrorWebView = forwardRef<CodeMirrorWebViewHandle, CodeMirrorW
       },
       redo: () => {
         injectMessage({ type: 'redo' });
+      },
+      insertText: (text: string) => {
+        injectMessage({ type: 'insertText', text });
       },
     }));
 
@@ -215,6 +231,11 @@ export const CodeMirrorWebView = forwardRef<CodeMirrorWebViewHandle, CodeMirrorW
       }
     }, [initialContent, language, injectMessage]);
 
+    const handleQuickInsert = useCallback((key: string) => {
+      const text = key === 'Tab' ? '\t' : key;
+      injectMessage({ type: 'insertText', text });
+    }, [injectMessage]);
+
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.editorBackground }]}>
         <WebView
@@ -231,6 +252,29 @@ export const CodeMirrorWebView = forwardRef<CodeMirrorWebViewHandle, CodeMirrorW
           showsVerticalScrollIndicator={false}
           showsHorizontalScrollIndicator={false}
         />
+        {showQuickInsert && (
+          <View style={[styles.quickInsertBar, { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.border }]}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="always"
+              contentContainerStyle={styles.quickInsertContent}
+            >
+              {QUICK_INSERT_KEYS.map((key) => (
+                <TouchableOpacity
+                  key={key}
+                  style={[styles.quickInsertKey, { backgroundColor: theme.colors.border }]}
+                  onPress={() => handleQuickInsert(key)}
+                  activeOpacity={0.6}
+                >
+                  <Text style={[styles.quickInsertKeyText, { color: theme.colors.text }]}>
+                    {key}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
       </View>
     );
   }
@@ -245,5 +289,28 @@ const styles = StyleSheet.create({
   webview: {
     flex: 1,
     backgroundColor: 'transparent',
+  },
+  quickInsertBar: {
+    height: 40,
+    borderTopWidth: 1,
+    justifyContent: 'center',
+  },
+  quickInsertContent: {
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    gap: 6,
+  },
+  quickInsertKey: {
+    minWidth: 34,
+    height: 30,
+    borderRadius: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  quickInsertKeyText: {
+    fontSize: 14,
+    fontFamily: 'monospace',
+    fontWeight: '500',
   },
 });
