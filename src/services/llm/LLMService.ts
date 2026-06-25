@@ -62,6 +62,12 @@ export class LLMService {
   }
 
   getModelsForProvider(provider: string): string[] {
+    // Use the LLM_PROVIDERS list (not the adapter) for accurate model lists
+    const providerInfo = LLM_PROVIDERS.find((p) => p.id === provider);
+    if (providerInfo) {
+      return providerInfo.models;
+    }
+    // Fallback to adapter
     const adapter = this.getAdapter(provider);
     return adapter.listModels();
   }

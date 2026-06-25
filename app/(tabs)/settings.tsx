@@ -274,10 +274,12 @@ export default function SettingsScreen() {
                   placeholderTextColor={colors.textMuted}
                   value={entry.key}
                   onChangeText={(val) => updateKeyValue(entry.type, val)}
-                  onBlur={() => handleSaveKey(entry.type, entry.key)}
+                  onEndEditing={() => handleSaveKey(entry.type, entry.key)}
+                  onSubmitEditing={() => handleSaveKey(entry.type, entry.key)}
                   secureTextEntry={!entry.visible}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  returnKeyType="done"
                 />
                 <Pressable
                   style={[styles.visibilityButton, { backgroundColor: colors.surfaceHover }]}

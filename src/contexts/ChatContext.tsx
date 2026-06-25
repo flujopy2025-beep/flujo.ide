@@ -123,6 +123,26 @@ export function ChatProvider({ children }: ChatProviderProps) {
     []
   );
 
+  // Auto-select the first configured provider if current one has no key
+  useEffect(() => {
+    const currentProviderConfig = settings.llmProviders.find(
+      (p) => p.type === selectedProvider && p.apiKey
+    );
+
+    if (!currentProviderConfig) {
+      // Find first provider with a key
+      const firstConfigured = settings.llmProviders.find((p) => p.apiKey);
+      if (firstConfigured) {
+        setSelectedProvider(firstConfigured.type);
+        // Set the first model for that provider
+        const providerInfo = llmService.current.getProviders().find((p) => p.id === firstConfigured.type);
+        if (providerInfo && providerInfo.models.length > 0) {
+          setSelectedModel(providerInfo.models[0]);
+        }
+      }
+    }
+  }, [settings.llmProviders, selectedProvider]);
+
   /**
    * Build a system prompt that includes MCP tool descriptions when tools are available.
    * This makes the LLM aware of connected MCP tools so it can reference them.
