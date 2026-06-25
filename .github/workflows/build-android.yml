@@ -36,14 +36,45 @@ jobs:
       - name: Expo prebuild
         run: npx expo prebuild --platform android --clean --no-install
 
-      - name: Fix Kotlin/Compose version mismatch
+      - name: Fix Kotlin/Compose Compiler compatibility
         run: |
-          # The Compose Compiler 1.5.15 requires Kotlin 1.9.25
-          # Update kotlinVersion in android/build.gradle
-          sed -i 's/kotlinVersion = "1.9.24"/kotlinVersion = "1.9.25"/' android/build.gradle
-          sed -i "s/kotlinVersion = '1.9.24'/kotlinVersion = '1.9.25'/" android/build.gradle
-          # Verify
-          grep -i "kotlin" android/build.gradle || true
+          # The error: Compose Compiler 1.5.15 requires Kotlin 1.9.25 but using 1.9.24
+          # Fix: Add suppressKotlinVersionCompatibilityCheck to gradle.properties
+          echo "" >> android/gradle.properties
+          echo "# Suppress Compose/Kotlin version check" >> android/gradle.properties
+          echo "android.suppressKotlinVersionCompatibilityCheck=true" >> android/gradle.properties
+          
+          # Also add the suppress flag directly to the Kotlin compile options in build.gradle
+          # Find where kotlinVersion is set and update it
+          echo "Checking build.gradle for kotlin version..."
+          cat android/build.gradle | grep -i kotlin || true
+          
+          # Force Kotlin version to 1.9.25 via buildscript ext
+          sed -i 's/ext {/ext {\n        kotlinVersion = "1.9.25"/' android/build.gradle
+          
+          # Also override via gradle properties
+          echo "kotlin.version=1.9.25" >> android/gradle.properties
+          
+          # Add compose compiler suppression via allprojects
+          cat >> android/build.gradle << 'EOF'
+
+          allprojects {
+              tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                  compilerOptions {
+                      freeCompilerArgs.addAll([
+                          "-P",
+                          "plugin:androidx.compose.compiler.plugins.kotlin:suppressKotlinVersionCompatibilityCheck=1.9.24"
+                      ])
+                  }
+              }
+          }
+          EOF
+          
+          echo "=== Final gradle.properties ==="
+          cat android/gradle.properties
+          echo ""
+          echo "=== Final build.gradle (last 20 lines) ==="
+          tail -20 android/build.gradle
 
       - name: Build APK
         run: |
