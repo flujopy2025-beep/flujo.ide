@@ -1,87 +1,79 @@
 /**
  * FileService - wrapper around expo-file-system for local file operations.
- * Uses the new class-based API (File, Directory, Paths) from expo-file-system.
+ * Uses the classic async API from expo-file-system (compatible with Expo 52).
  * The workspace is stored in the app's document directory.
  */
 
-import { File, Directory, Paths } from 'expo-file-system';
+import * as FileSystem from 'expo-file-system';
 import { FileNode } from '../types';
 import { detectLanguage } from '../utils/languageDetection';
 
 const WORKSPACE_NAME = 'workspace';
 
 /**
- * Get the workspace directory instance.
+ * Get the workspace directory URI.
  */
-function getWorkspaceDirectory(): Directory {
-  return new Directory(Paths.document, WORKSPACE_NAME);
+function getWorkspaceUri(): string {
+  return `${FileSystem.documentDirectory}${WORKSPACE_NAME}/`;
+}
+
+/**
+ * Get the full URI for a relative path within the workspace.
+ */
+function getFileUri(relativePath: string): string {
+  return `${getWorkspaceUri()}${relativePath}`;
 }
 
 /**
  * Ensure the workspace directory exists.
  */
-function ensureWorkspaceDir(): void {
-  const workspaceDir = getWorkspaceDirectory();
-  if (!workspaceDir.exists) {
-    workspaceDir.create();
+async function ensureWorkspaceDir(): Promise<void> {
+  const uri = getWorkspaceUri();
+  const info = await FileSystem.getInfoAsync(uri);
+  if (!info.exists) {
+    await FileSystem.makeDirectoryAsync(uri, { intermediates: true });
   }
 }
 
 /**
- * Get a File instance for a relative path within the workspace.
+ * Ensure parent directory exists for a given file path.
  */
-function getFile(relativePath: string): File {
-  return new File(getWorkspaceDirectory(), relativePath);
-}
-
-/**
- * Get a Directory instance for a relative path within the workspace.
- */
-function getDirectory(relativePath: string): Directory {
-  if (!relativePath) {
-    return getWorkspaceDirectory();
+async function ensureParentDir(relativePath: string): Promise<void> {
+  const parts = relativePath.split('/');
+  if (parts.length > 1) {
+    const parentPath = parts.slice(0, -1).join('/');
+    const parentUri = getFileUri(parentPath);
+    const info = await FileSystem.getInfoAsync(parentUri);
+    if (!info.exists) {
+      await FileSystem.makeDirectoryAsync(parentUri, { intermediates: true });
+    }
   }
-  return new Directory(getWorkspaceDirectory(), relativePath);
-}
-
-/**
- * Extract relative path from a uri within the workspace.
- */
-function getRelativePath(uri: string): string {
-  const workspaceUri = getWorkspaceDirectory().uri;
-  if (uri.startsWith(workspaceUri)) {
-    return uri.slice(workspaceUri.length);
-  }
-  return uri;
 }
 
 /**
  * List directory contents recursively, building a FileNode tree.
  */
-function listDirectory(relativePath: string = ''): FileNode[] {
-  ensureWorkspaceDir();
-  const dir = getDirectory(relativePath);
+async function listDirectory(relativePath: string = ''): Promise<FileNode[]> {
+  await ensureWorkspaceDir();
+  const dirUri = relativePath ? getFileUri(relativePath) : getWorkspaceUri();
 
-  if (!dir.exists) {
+  const info = await FileSystem.getInfoAsync(dirUri);
+  if (!info.exists || !info.isDirectory) {
     return [];
   }
 
-  const entries = dir.list();
+  const entries = await FileSystem.readDirectoryAsync(dirUri);
   const nodes: FileNode[] = [];
 
-  // Sort entries by name
-  const sorted = entries.sort((a, b) => {
-    const aName = a.name || '';
-    const bName = b.name || '';
-    return aName.localeCompare(bName);
-  });
+  const sorted = entries.sort((a, b) => a.localeCompare(b));
 
-  for (const entry of sorted) {
-    const entryName = entry.name || '';
+  for (const entryName of sorted) {
     const entryRelPath = relativePath ? `${relativePath}/${entryName}` : entryName;
+    const entryUri = getFileUri(entryRelPath);
+    const entryInfo = await FileSystem.getInfoAsync(entryUri);
 
-    if (entry instanceof Directory) {
-      const children = listDirectory(entryRelPath);
+    if (entryInfo.isDirectory) {
+      const children = await listDirectory(entryRelPath);
       nodes.push({
         id: entryRelPath,
         name: entryName,
@@ -90,14 +82,13 @@ function listDirectory(relativePath: string = ''): FileNode[] {
         children,
       });
     } else {
-      const file = entry as File;
       nodes.push({
         id: entryRelPath,
         name: entryName,
         path: entryRelPath,
         type: 'file',
         language: detectLanguage(entryName),
-        lastModified: file.lastModified ?? undefined,
+        lastModified: entryInfo.exists ? (entryInfo as { modificationTime?: number }).modificationTime : undefined,
       });
     }
   }
@@ -116,133 +107,98 @@ function listDirectory(relativePath: string = ''): FileNode[] {
  * Read file content.
  */
 async function readFile(relativePath: string): Promise<string> {
-  const file = getFile(relativePath);
-  if (!file.exists) {
+  const uri = getFileUri(relativePath);
+  const info = await FileSystem.getInfoAsync(uri);
+  if (!info.exists) {
     throw new Error(`File not found: ${relativePath}`);
   }
-  return await file.text();
+  return await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.UTF8 });
 }
 
 /**
  * Write content to a file. Creates parent directories if needed.
  */
-function writeFile(relativePath: string, content: string): void {
-  ensureWorkspaceDir();
-
-  // Ensure parent directory exists
-  const parts = relativePath.split('/');
-  if (parts.length > 1) {
-    const parentPath = parts.slice(0, -1).join('/');
-    const parentDir = getDirectory(parentPath);
-    if (!parentDir.exists) {
-      parentDir.create();
-    }
-  }
-
-  const file = getFile(relativePath);
-  if (!file.exists) {
-    file.create();
-  }
-  file.write(content);
+async function writeFile(relativePath: string, content: string): Promise<void> {
+  await ensureWorkspaceDir();
+  await ensureParentDir(relativePath);
+  const uri = getFileUri(relativePath);
+  await FileSystem.writeAsStringAsync(uri, content, { encoding: FileSystem.EncodingType.UTF8 });
 }
 
 /**
  * Create a new file with optional initial content.
  */
-function createFile(relativePath: string, content: string = ''): void {
-  ensureWorkspaceDir();
-  const file = getFile(relativePath);
-  if (file.exists) {
+async function createFile(relativePath: string, content: string = ''): Promise<void> {
+  await ensureWorkspaceDir();
+  const uri = getFileUri(relativePath);
+  const info = await FileSystem.getInfoAsync(uri);
+  if (info.exists) {
     throw new Error(`File already exists: ${relativePath}`);
   }
-
-  // Ensure parent directory exists
-  const parts = relativePath.split('/');
-  if (parts.length > 1) {
-    const parentPath = parts.slice(0, -1).join('/');
-    const parentDir = getDirectory(parentPath);
-    if (!parentDir.exists) {
-      parentDir.create();
-    }
-  }
-
-  file.create();
-  if (content) {
-    file.write(content);
-  }
+  await ensureParentDir(relativePath);
+  await FileSystem.writeAsStringAsync(uri, content, { encoding: FileSystem.EncodingType.UTF8 });
 }
 
 /**
  * Create a new directory.
  */
-function createDirectory(relativePath: string): void {
-  ensureWorkspaceDir();
-  const dir = getDirectory(relativePath);
-  if (dir.exists) {
+async function createDirectory(relativePath: string): Promise<void> {
+  await ensureWorkspaceDir();
+  const uri = getFileUri(relativePath);
+  const info = await FileSystem.getInfoAsync(uri);
+  if (info.exists) {
     throw new Error(`Directory already exists: ${relativePath}`);
   }
-  dir.create();
+  await FileSystem.makeDirectoryAsync(uri, { intermediates: true });
 }
 
 /**
  * Delete a file or directory.
  */
-function deleteItem(relativePath: string): void {
-  const file = getFile(relativePath);
-  if (file.exists) {
-    file.delete();
-    return;
+async function deleteItem(relativePath: string): Promise<void> {
+  const uri = getFileUri(relativePath);
+  const info = await FileSystem.getInfoAsync(uri);
+  if (!info.exists) {
+    throw new Error(`Item not found: ${relativePath}`);
   }
-  const dir = getDirectory(relativePath);
-  if (dir.exists) {
-    dir.delete();
-    return;
-  }
-  throw new Error(`Item not found: ${relativePath}`);
+  await FileSystem.deleteAsync(uri, { idempotent: true });
 }
 
 /**
  * Rename (move) a file or directory.
  */
 async function renameFile(oldRelativePath: string, newRelativePath: string): Promise<void> {
-  const oldFile = getFile(oldRelativePath);
-  if (oldFile.exists) {
-    const newFile = getFile(newRelativePath);
-    if (newFile.exists) {
-      throw new Error(`Destination already exists: ${newRelativePath}`);
-    }
-    await oldFile.move(newFile);
-    return;
+  const oldUri = getFileUri(oldRelativePath);
+  const newUri = getFileUri(newRelativePath);
+
+  const oldInfo = await FileSystem.getInfoAsync(oldUri);
+  if (!oldInfo.exists) {
+    throw new Error(`Item not found: ${oldRelativePath}`);
   }
 
-  const oldDir = getDirectory(oldRelativePath);
-  if (oldDir.exists) {
-    const newDir = getDirectory(newRelativePath);
-    if (newDir.exists) {
-      throw new Error(`Destination already exists: ${newRelativePath}`);
-    }
-    await oldDir.move(newDir);
-    return;
+  const newInfo = await FileSystem.getInfoAsync(newUri);
+  if (newInfo.exists) {
+    throw new Error(`Destination already exists: ${newRelativePath}`);
   }
 
-  throw new Error(`Item not found: ${oldRelativePath}`);
+  await ensureParentDir(newRelativePath);
+  await FileSystem.moveAsync({ from: oldUri, to: newUri });
 }
 
 /**
  * Check if a file or directory exists.
  */
-function exists(relativePath: string): boolean {
-  const file = getFile(relativePath);
-  if (file.exists) return true;
-  const dir = getDirectory(relativePath);
-  return dir.exists;
+async function exists(relativePath: string): Promise<boolean> {
+  const uri = getFileUri(relativePath);
+  const info = await FileSystem.getInfoAsync(uri);
+  return info.exists;
 }
 
 /**
  * Get the workspace directory URI.
  */
 function getWorkspaceDir(): string {
-  return getWorkspaceDirectory().uri;
+  return getWorkspaceUri();
 }
 
 export const FileService = {

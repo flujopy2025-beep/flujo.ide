@@ -15,6 +15,7 @@ import {
   MCPResourceContent,
 } from './types';
 import { getStorageService } from '../StorageService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = '@flujoide/mcp_configs';
 
@@ -33,9 +34,7 @@ export class MCPManager {
    */
   async loadConfigs(): Promise<MCPServerConfig[]> {
     try {
-      const storage = getStorageService();
-      const AsyncStorage = await import('@react-native-async-storage/async-storage');
-      const data = await AsyncStorage.default.getItem(STORAGE_KEY);
+      const data = await AsyncStorage.getItem(STORAGE_KEY);
       this.configs = data ? JSON.parse(data) : [];
       return this.configs;
     } catch {
@@ -49,8 +48,7 @@ export class MCPManager {
    */
   async saveConfigs(): Promise<void> {
     try {
-      const AsyncStorage = await import('@react-native-async-storage/async-storage');
-      await AsyncStorage.default.setItem(STORAGE_KEY, JSON.stringify(this.configs));
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(this.configs));
     } catch {
       // Silently fail
     }
