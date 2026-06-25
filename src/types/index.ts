@@ -51,7 +51,7 @@ export interface ToolResultInfo {
 export interface LLMProvider {
   id: string;
   name: string;
-  type: 'openai' | 'anthropic' | 'google';
+  type: 'openai' | 'anthropic' | 'google' | 'openrouter';
   apiKey: string;
   baseUrl?: string;
   model: string;

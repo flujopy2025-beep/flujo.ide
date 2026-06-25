@@ -25,6 +25,17 @@ export const LLM_PROVIDERS: LLMProviderInfo[] = [
     name: 'Google (Gemini)',
     models: ['gemini-1.5-pro', 'gemini-1.5-flash'],
   },
+  {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    models: [
+      'openai/gpt-4o',
+      'anthropic/claude-3.5-sonnet',
+      'google/gemini-pro',
+      'meta-llama/llama-3-70b',
+      'mistralai/mistral-large',
+    ],
+  },
 ];
 
 export class LLMService {
@@ -35,6 +46,7 @@ export class LLMService {
     this.adapters.set('openai', new OpenAIAdapter());
     this.adapters.set('anthropic', new ClaudeAdapter());
     this.adapters.set('google', new GeminiAdapter());
+    this.adapters.set('openrouter', new OpenAIAdapter());
   }
 
   getAdapter(provider: string): LLMAdapter {

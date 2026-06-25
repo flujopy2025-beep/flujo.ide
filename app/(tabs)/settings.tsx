@@ -1,6 +1,7 @@
 /**
- * Settings Tab Screen - LLM provider API key management, theme selection,
- * editor settings, and about section.
+ * Settings Tab Screen - Professional settings with Flujo IDE branding,
+ * LLM provider API key management (including OpenRouter), theme selection,
+ * and editor settings.
  */
 
 import React, { useContext, useState, useCallback } from 'react';
@@ -19,12 +20,83 @@ import { SettingsContext } from '../../src/contexts/SettingsContext';
 import { LLM_PROVIDERS } from '../../src/services/llm';
 import { LLMProvider } from '../../src/types';
 
+const BRAND_CYAN = '#00D4FF';
+
 interface ProviderKeyEntry {
-  type: 'openai' | 'anthropic' | 'google';
+  type: 'openai' | 'anthropic' | 'google' | 'openrouter';
   name: string;
   key: string;
   visible: boolean;
 }
+
+function SettingsLogo() {
+  return (
+    <View style={logoStyles.container}>
+      <View style={logoStyles.iconContainer}>
+        <View style={logoStyles.robotHead}>
+          <View style={logoStyles.eyeRow}>
+            <View style={logoStyles.eye} />
+            <View style={logoStyles.eye} />
+          </View>
+        </View>
+      </View>
+      <View style={logoStyles.textContainer}>
+        <Text style={logoStyles.title}>Flujo IDE</Text>
+        <Text style={logoStyles.subtitle}>Settings & Configuration</Text>
+      </View>
+    </View>
+  );
+}
+
+const logoStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  iconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#161B22',
+    borderWidth: 1.5,
+    borderColor: BRAND_CYAN,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  robotHead: {
+    width: 28,
+    height: 22,
+    borderRadius: 8,
+    backgroundColor: '#0D1117',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eyeRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  eye: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: BRAND_CYAN,
+  },
+  textContainer: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: BRAND_CYAN,
+    letterSpacing: 0.5,
+  },
+  subtitle: {
+    fontSize: 12,
+    color: '#8B949E',
+    marginTop: 2,
+  },
+});
 
 export default function SettingsScreen() {
   const { theme, isDark, toggleTheme } = useTheme();
@@ -47,30 +119,48 @@ export default function SettingsScreen() {
 
   // Sync when settings change externally
   React.useEffect(() => {
-    setProviderKeys((prev) =>
-      prev.map((entry) => {
+    setProviderKeys((prev) => {
+      // Check if there are new providers not yet tracked
+      const tracked = new Set(prev.map((e) => e.type));
+      const newEntries = LLM_PROVIDERS
+        .filter((p) => !tracked.has(p.id))
+        .map((p) => {
+          const existing = settings.llmProviders.find((lp) => lp.type === p.id);
+          return {
+            type: p.id,
+            name: p.name,
+            key: existing?.apiKey || '',
+            visible: false,
+          };
+        });
+
+      const updated = prev.map((entry) => {
         const existing = settings.llmProviders.find((lp) => lp.type === entry.type);
         if (existing && existing.apiKey !== entry.key) {
           return { ...entry, key: existing.apiKey };
         }
         return entry;
-      })
-    );
+      });
+
+      return [...updated, ...newEntries];
+    });
   }, [settings.llmProviders]);
 
   const handleSaveKey = useCallback(
-    (type: 'openai' | 'anthropic' | 'google', key: string) => {
+    (type: 'openai' | 'anthropic' | 'google' | 'openrouter', key: string) => {
       const existing = settings.llmProviders.find((p) => p.type === type);
       const providerInfo = LLM_PROVIDERS.find((p) => p.id === type);
 
       if (existing) {
         updateLLMProvider(existing.id, { apiKey: key });
       } else if (key.trim()) {
+        const baseUrl = type === 'openrouter' ? 'https://openrouter.ai/api/v1' : undefined;
         const newProvider: LLMProvider = {
           id: `${type}-${Date.now()}`,
           name: providerInfo?.name || type,
           type,
           apiKey: key.trim(),
+          baseUrl,
           model: providerInfo?.models[0] || '',
           isActive: true,
         };
@@ -96,22 +186,42 @@ export default function SettingsScreen() {
     );
   };
 
+  const getProviderIcon = (type: string): string => {
+    switch (type) {
+      case 'openai': return 'logo-electron';
+      case 'anthropic': return 'cube-outline';
+      case 'google': return 'diamond-outline';
+      case 'openrouter': return 'git-network-outline';
+      default: return 'key-outline';
+    }
+  };
+
+  const getProviderDescription = (type: string): string => {
+    switch (type) {
+      case 'openai': return 'GPT-4o, GPT-4o-mini, GPT-3.5';
+      case 'anthropic': return 'Claude 3.5 Sonnet, Haiku, Opus';
+      case 'google': return 'Gemini 1.5 Pro, Flash';
+      case 'openrouter': return 'Access 100+ models via one API';
+      default: return '';
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
+      {/* Header with Logo */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Text style={[styles.title, { color: colors.text }]}>Settings</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          App configuration and preferences
-        </Text>
+        <SettingsLogo />
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* LLM Providers Section */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-            LLM PROVIDERS
-          </Text>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="flash" size={16} color={BRAND_CYAN} />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              AI Providers
+            </Text>
+          </View>
           <Text style={[styles.sectionSubtitle, { color: colors.textMuted }]}>
             Add your API keys to enable AI chat. Keys are stored locally on your device.
           </Text>
@@ -119,11 +229,37 @@ export default function SettingsScreen() {
           {providerKeys.map((entry) => (
             <View
               key={entry.type}
-              style={[styles.providerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              style={[
+                styles.providerCard,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: entry.key.trim() ? BRAND_CYAN + '40' : colors.border,
+                },
+              ]}
             >
-              <Text style={[styles.providerName, { color: colors.text }]}>
-                {entry.name}
-              </Text>
+              <View style={styles.providerHeader}>
+                <View style={[styles.providerIconContainer, { backgroundColor: BRAND_CYAN + '15' }]}>
+                  <Ionicons
+                    name={getProviderIcon(entry.type) as any}
+                    size={18}
+                    color={BRAND_CYAN}
+                  />
+                </View>
+                <View style={styles.providerInfo}>
+                  <Text style={[styles.providerName, { color: colors.text }]}>
+                    {entry.name}
+                  </Text>
+                  <Text style={[styles.providerDescription, { color: colors.textMuted }]}>
+                    {getProviderDescription(entry.type)}
+                  </Text>
+                </View>
+                {entry.key.trim() !== '' && (
+                  <View style={styles.statusBadge}>
+                    <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+                  </View>
+                )}
+              </View>
+
               <View style={styles.keyInputRow}>
                 <TextInput
                   style={[
@@ -154,140 +290,155 @@ export default function SettingsScreen() {
                   />
                 </Pressable>
               </View>
-              {entry.key.trim() !== '' && (
-                <View style={styles.statusRow}>
-                  <Ionicons name="checkmark-circle" size={14} color={colors.success} />
-                  <Text style={[styles.statusText, { color: colors.success }]}>
-                    Key configured
-                  </Text>
-                </View>
+
+              {entry.type === 'openrouter' && (
+                <Text style={[styles.providerNote, { color: colors.textMuted }]}>
+                  Base URL: https://openrouter.ai/api/v1
+                </Text>
               )}
             </View>
           ))}
         </View>
 
-        {/* Theme Section */}
+        {/* Appearance Section */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-            APPEARANCE
-          </Text>
-          <View style={[styles.settingRow, { borderBottomColor: colors.border }]}>
-            <View style={styles.settingInfo}>
-              <Text style={[styles.settingLabel, { color: colors.text }]}>Dark Theme</Text>
-              <Text style={[styles.settingDescription, { color: colors.textMuted }]}>
-                Use dark color scheme
-              </Text>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="color-palette" size={16} color={BRAND_CYAN} />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              Appearance
+            </Text>
+          </View>
+
+          <View style={[styles.settingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.settingRow}>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingLabel, { color: colors.text }]}>Dark Theme</Text>
+                <Text style={[styles.settingDescription, { color: colors.textMuted }]}>
+                  Use dark color scheme
+                </Text>
+              </View>
+              <Switch
+                value={isDark}
+                onValueChange={() => {
+                  toggleTheme();
+                  updateSettings({ theme: isDark ? 'light' : 'dark' });
+                }}
+                trackColor={{ false: colors.border, true: BRAND_CYAN }}
+                thumbColor="#ffffff"
+              />
             </View>
-            <Switch
-              value={isDark}
-              onValueChange={() => {
-                toggleTheme();
-                updateSettings({ theme: isDark ? 'light' : 'dark' });
-              }}
-              trackColor={{ false: colors.border, true: colors.primary }}
-              thumbColor="#ffffff"
-            />
           </View>
         </View>
 
         {/* Editor Settings Section */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-            EDITOR
-          </Text>
-
-          <View style={[styles.settingRow, { borderBottomColor: colors.border }]}>
-            <View style={styles.settingInfo}>
-              <Text style={[styles.settingLabel, { color: colors.text }]}>Font Size</Text>
-              <Text style={[styles.settingDescription, { color: colors.textMuted }]}>
-                Editor font size in pixels
-              </Text>
-            </View>
-            <View style={styles.numberControl}>
-              <Pressable
-                style={[styles.numberButton, { backgroundColor: colors.surfaceHover }]}
-                onPress={() =>
-                  updateSettings({ fontSize: Math.max(10, settings.fontSize - 1) })
-                }
-              >
-                <Text style={[styles.numberButtonText, { color: colors.text }]}>-</Text>
-              </Pressable>
-              <Text style={[styles.numberValue, { color: colors.text }]}>
-                {settings.fontSize}
-              </Text>
-              <Pressable
-                style={[styles.numberButton, { backgroundColor: colors.surfaceHover }]}
-                onPress={() =>
-                  updateSettings({ fontSize: Math.min(24, settings.fontSize + 1) })
-                }
-              >
-                <Text style={[styles.numberButtonText, { color: colors.text }]}>+</Text>
-              </Pressable>
-            </View>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="code-slash" size={16} color={BRAND_CYAN} />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              Editor
+            </Text>
           </View>
 
-          <View style={[styles.settingRow, { borderBottomColor: colors.border }]}>
-            <View style={styles.settingInfo}>
-              <Text style={[styles.settingLabel, { color: colors.text }]}>Tab Size</Text>
-              <Text style={[styles.settingDescription, { color: colors.textMuted }]}>
-                Number of spaces per tab
-              </Text>
+          <View style={[styles.settingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={[styles.settingRow, { borderBottomColor: colors.border, borderBottomWidth: 0.5 }]}>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingLabel, { color: colors.text }]}>Font Size</Text>
+                <Text style={[styles.settingDescription, { color: colors.textMuted }]}>
+                  Editor font size in pixels
+                </Text>
+              </View>
+              <View style={styles.numberControl}>
+                <Pressable
+                  style={[styles.numberButton, { backgroundColor: colors.surfaceHover }]}
+                  onPress={() =>
+                    updateSettings({ fontSize: Math.max(10, settings.fontSize - 1) })
+                  }
+                >
+                  <Text style={[styles.numberButtonText, { color: colors.text }]}>-</Text>
+                </Pressable>
+                <Text style={[styles.numberValue, { color: BRAND_CYAN }]}>
+                  {settings.fontSize}
+                </Text>
+                <Pressable
+                  style={[styles.numberButton, { backgroundColor: colors.surfaceHover }]}
+                  onPress={() =>
+                    updateSettings({ fontSize: Math.min(24, settings.fontSize + 1) })
+                  }
+                >
+                  <Text style={[styles.numberButtonText, { color: colors.text }]}>+</Text>
+                </Pressable>
+              </View>
             </View>
-            <View style={styles.numberControl}>
-              <Pressable
-                style={[styles.numberButton, { backgroundColor: colors.surfaceHover }]}
-                onPress={() =>
-                  updateSettings({ tabSize: Math.max(1, settings.tabSize - 1) })
-                }
-              >
-                <Text style={[styles.numberButtonText, { color: colors.text }]}>-</Text>
-              </Pressable>
-              <Text style={[styles.numberValue, { color: colors.text }]}>
-                {settings.tabSize}
-              </Text>
-              <Pressable
-                style={[styles.numberButton, { backgroundColor: colors.surfaceHover }]}
-                onPress={() =>
-                  updateSettings({ tabSize: Math.min(8, settings.tabSize + 1) })
-                }
-              >
-                <Text style={[styles.numberButtonText, { color: colors.text }]}>+</Text>
-              </Pressable>
-            </View>
-          </View>
 
-          <View style={[styles.settingRow, { borderBottomColor: colors.border }]}>
-            <View style={styles.settingInfo}>
-              <Text style={[styles.settingLabel, { color: colors.text }]}>Word Wrap</Text>
-              <Text style={[styles.settingDescription, { color: colors.textMuted }]}>
-                Wrap long lines in the editor
-              </Text>
+            <View style={[styles.settingRow, { borderBottomColor: colors.border, borderBottomWidth: 0.5 }]}>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingLabel, { color: colors.text }]}>Tab Size</Text>
+                <Text style={[styles.settingDescription, { color: colors.textMuted }]}>
+                  Number of spaces per tab
+                </Text>
+              </View>
+              <View style={styles.numberControl}>
+                <Pressable
+                  style={[styles.numberButton, { backgroundColor: colors.surfaceHover }]}
+                  onPress={() =>
+                    updateSettings({ tabSize: Math.max(1, settings.tabSize - 1) })
+                  }
+                >
+                  <Text style={[styles.numberButtonText, { color: colors.text }]}>-</Text>
+                </Pressable>
+                <Text style={[styles.numberValue, { color: BRAND_CYAN }]}>
+                  {settings.tabSize}
+                </Text>
+                <Pressable
+                  style={[styles.numberButton, { backgroundColor: colors.surfaceHover }]}
+                  onPress={() =>
+                    updateSettings({ tabSize: Math.min(8, settings.tabSize + 1) })
+                  }
+                >
+                  <Text style={[styles.numberButtonText, { color: colors.text }]}>+</Text>
+                </Pressable>
+              </View>
             </View>
-            <Switch
-              value={settings.wordWrap}
-              onValueChange={(val) => updateSettings({ wordWrap: val })}
-              trackColor={{ false: colors.border, true: colors.primary }}
-              thumbColor="#ffffff"
-            />
+
+            <View style={styles.settingRow}>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingLabel, { color: colors.text }]}>Word Wrap</Text>
+                <Text style={[styles.settingDescription, { color: colors.textMuted }]}>
+                  Wrap long lines in the editor
+                </Text>
+              </View>
+              <Switch
+                value={settings.wordWrap}
+                onValueChange={(val) => updateSettings({ wordWrap: val })}
+                trackColor={{ false: colors.border, true: BRAND_CYAN }}
+                thumbColor="#ffffff"
+              />
+            </View>
           </View>
         </View>
 
         {/* About Section */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-            ABOUT
-          </Text>
-          <View style={[styles.settingRow, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.settingLabel, { color: colors.text }]}>Version</Text>
-            <Text style={[styles.settingValue, { color: colors.textSecondary }]}>1.0.0</Text>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="information-circle" size={16} color={BRAND_CYAN} />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              About
+            </Text>
           </View>
-          <View style={[styles.settingRow, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.settingLabel, { color: colors.text }]}>App Name</Text>
-            <Text style={[styles.settingValue, { color: colors.textSecondary }]}>Flujo IDE</Text>
-          </View>
-          <View style={[styles.settingRow, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.settingLabel, { color: colors.text }]}>License</Text>
-            <Text style={[styles.settingValue, { color: colors.textSecondary }]}>MIT</Text>
+
+          <View style={[styles.settingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={[styles.aboutRow, { borderBottomColor: colors.border, borderBottomWidth: 0.5 }]}>
+              <Text style={[styles.aboutLabel, { color: colors.textSecondary }]}>Version</Text>
+              <Text style={[styles.aboutValue, { color: colors.text }]}>1.0.0</Text>
+            </View>
+            <View style={[styles.aboutRow, { borderBottomColor: colors.border, borderBottomWidth: 0.5 }]}>
+              <Text style={[styles.aboutLabel, { color: colors.textSecondary }]}>App Name</Text>
+              <Text style={[styles.aboutValue, { color: colors.text }]}>Flujo IDE</Text>
+            </View>
+            <View style={styles.aboutRow}>
+              <Text style={[styles.aboutLabel, { color: colors.textSecondary }]}>License</Text>
+              <Text style={[styles.aboutValue, { color: colors.text }]}>MIT</Text>
+            </View>
           </View>
         </View>
 
@@ -305,44 +456,69 @@ const styles = StyleSheet.create({
   header: {
     paddingTop: 48,
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 16,
     borderBottomWidth: 1,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  subtitle: {
-    fontSize: 12,
-    marginTop: 4,
   },
   content: {
     flex: 1,
   },
   section: {
-    paddingTop: 20,
+    paddingTop: 24,
     paddingHorizontal: 16,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
   sectionTitle: {
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '700',
-    letterSpacing: 0.8,
-    marginBottom: 4,
+    letterSpacing: 0.3,
   },
   sectionSubtitle: {
     fontSize: 12,
-    marginBottom: 12,
+    marginBottom: 14,
+    lineHeight: 18,
   },
   providerCard: {
     borderWidth: 1,
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 14,
     marginBottom: 12,
+  },
+  providerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  providerIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  providerInfo: {
+    flex: 1,
+    marginLeft: 12,
   },
   providerName: {
     fontSize: 15,
     fontWeight: '600',
-    marginBottom: 10,
+  },
+  providerDescription: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  providerNote: {
+    fontSize: 11,
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  statusBadge: {
+    marginLeft: 8,
   },
   keyInputRow: {
     flexDirection: 'row',
@@ -364,35 +540,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginLeft: 8,
   },
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  statusText: {
-    fontSize: 12,
-    marginLeft: 6,
-    fontWeight: '500',
+  settingCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 4,
+    paddingHorizontal: 14,
   },
   settingRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 14,
-    borderBottomWidth: 0.5,
   },
   settingInfo: {
     flex: 1,
   },
   settingLabel: {
     fontSize: 15,
+    fontWeight: '500',
   },
   settingDescription: {
     fontSize: 12,
     marginTop: 2,
-  },
-  settingValue: {
-    fontSize: 14,
   },
   numberControl: {
     flexDirection: 'row',
@@ -411,9 +580,22 @@ const styles = StyleSheet.create({
   },
   numberValue: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
     minWidth: 30,
     textAlign: 'center',
+  },
+  aboutRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 13,
+  },
+  aboutLabel: {
+    fontSize: 14,
+  },
+  aboutValue: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   bottomSpacer: {
     height: 40,

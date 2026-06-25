@@ -11,7 +11,7 @@ export interface LLMMessage {
 }
 
 export interface LLMConfig {
-  provider: 'openai' | 'anthropic' | 'google';
+  provider: 'openai' | 'anthropic' | 'google' | 'openrouter';
   model: string;
   apiKey: string;
   baseUrl?: string;
@@ -54,7 +54,7 @@ export interface LLMAdapter {
 }
 
 export interface LLMProviderInfo {
-  id: 'openai' | 'anthropic' | 'google';
+  id: 'openai' | 'anthropic' | 'google' | 'openrouter';
   name: string;
   models: string[];
 }
