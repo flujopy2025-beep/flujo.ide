@@ -36,6 +36,15 @@ jobs:
       - name: Expo prebuild
         run: npx expo prebuild --platform android --clean --no-install
 
+      - name: Fix Kotlin/Compose version mismatch
+        run: |
+          # The Compose Compiler 1.5.15 requires Kotlin 1.9.25
+          # Update kotlinVersion in android/build.gradle
+          sed -i 's/kotlinVersion = "1.9.24"/kotlinVersion = "1.9.25"/' android/build.gradle
+          sed -i "s/kotlinVersion = '1.9.24'/kotlinVersion = '1.9.25'/" android/build.gradle
+          # Verify
+          grep -i "kotlin" android/build.gradle || true
+
       - name: Build APK
         run: |
           cd android
