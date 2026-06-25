@@ -78,6 +78,7 @@ export interface AppSettings {
   llmProviders: LLMProvider[];
   mcpServers: MCPServer[];
   activeProviderId?: string;
+  googleClientId?: string;
 }
 
 export interface ThemeColors {

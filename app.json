@@ -32,7 +32,8 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-document-picker"
+      "expo-document-picker",
+      "expo-crypto"
     ]
   }
 }

@@ -45,6 +45,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="console"
+        options={{
+          title: 'Console',
+          tabBarIcon: ({ color, size }: TabBarIconProps) => (
+            <Ionicons name={'analytics-outline' as IoniconsName} size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="chat"
         options={{
           title: 'Chat',

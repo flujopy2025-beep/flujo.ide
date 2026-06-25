@@ -16,10 +16,12 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../src/hooks/useTheme';
 import { SettingsContext } from '../../src/contexts/SettingsContext';
 import { LLM_PROVIDERS } from '../../src/services/llm';
 import { LLMProvider } from '../../src/types';
+import { hasStoredToken, clearTokens } from '../../src/services/GoogleSearchConsole';
 
 const BRAND_CYAN = '#00D4FF';
 
@@ -78,6 +80,29 @@ export default function SettingsScreen() {
   const { colors } = theme;
   const { settings, updateSettings, updateLLMProvider, addLLMProvider } =
     useContext(SettingsContext);
+
+  // Google Search Console state
+  const [googleClientId, setGoogleClientId] = useState(settings.googleClientId || '');
+  const [gscConnected, setGscConnected] = useState(false);
+
+  // Check GSC connection status on mount
+  React.useEffect(() => {
+    hasStoredToken().then(setGscConnected);
+  }, []);
+
+  // Sync googleClientId from settings
+  React.useEffect(() => {
+    setGoogleClientId(settings.googleClientId || '');
+  }, [settings.googleClientId]);
+
+  const handleSaveGoogleClientId = useCallback(() => {
+    updateSettings({ googleClientId: googleClientId.trim() || undefined });
+  }, [googleClientId, updateSettings]);
+
+  const handleDisconnectGsc = useCallback(async () => {
+    await clearTokens();
+    setGscConnected(false);
+  }, []);
 
   // Track API key inputs and visibility
   const [providerKeys, setProviderKeys] = useState<ProviderKeyEntry[]>(() =>
@@ -307,6 +332,116 @@ export default function SettingsScreen() {
               )}
             </View>
           ))}
+        </View>
+
+        {/* Google Search Console Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="analytics" size={16} color={BRAND_CYAN} />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              Google Search Console
+            </Text>
+          </View>
+          <Text style={[styles.sectionSubtitle, { color: colors.textMuted }]}>
+            Connect to view your search performance data (keywords, clicks, impressions).
+          </Text>
+
+          <View
+            style={[
+              styles.providerCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: gscConnected ? BRAND_CYAN + '40' : colors.border,
+              },
+            ]}
+          >
+            {/* Connection Status */}
+            <View style={styles.providerHeader}>
+              <View style={[styles.providerIconContainer, { backgroundColor: BRAND_CYAN + '15' }]}>
+                <Ionicons name="logo-google" size={18} color={BRAND_CYAN} />
+              </View>
+              <View style={styles.providerInfo}>
+                <Text style={[styles.providerName, { color: colors.text }]}>
+                  Connection Status
+                </Text>
+                <Text style={[styles.providerDescription, { color: gscConnected ? colors.success : colors.textMuted }]}>
+                  {gscConnected ? 'Connected' : 'Not connected'}
+                </Text>
+              </View>
+              {gscConnected && (
+                <View style={styles.statusBadge}>
+                  <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+                </View>
+              )}
+            </View>
+
+            {/* Client ID Input */}
+            <View style={styles.keyInputRow}>
+              <TextInput
+                style={[
+                  styles.keyInput,
+                  {
+                    backgroundColor: colors.background,
+                    color: colors.text,
+                    borderColor: colors.border,
+                  },
+                ]}
+                placeholder="Enter Google OAuth Client ID"
+                placeholderTextColor={colors.textMuted}
+                value={googleClientId}
+                onChangeText={setGoogleClientId}
+                onEndEditing={handleSaveGoogleClientId}
+                onSubmitEditing={handleSaveGoogleClientId}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="done"
+              />
+            </View>
+
+            {/* Save Button */}
+            <Pressable
+              style={[
+                styles.saveButton,
+                {
+                  backgroundColor: googleClientId.trim() ? BRAND_CYAN : colors.surfaceHover,
+                  opacity: googleClientId.trim() ? 1 : 0.5,
+                },
+              ]}
+              onPress={handleSaveGoogleClientId}
+              disabled={!googleClientId.trim()}
+            >
+              <Ionicons
+                name="save-outline"
+                size={16}
+                color={googleClientId.trim() ? '#0D1117' : colors.textMuted}
+              />
+              <Text
+                style={[
+                  styles.saveButtonText,
+                  { color: googleClientId.trim() ? '#0D1117' : colors.textMuted },
+                ]}
+              >
+                Save Client ID
+              </Text>
+            </Pressable>
+
+            {/* Disconnect Button */}
+            {gscConnected && (
+              <Pressable
+                style={[styles.saveButton, { backgroundColor: colors.error + '20', marginTop: 8 }]}
+                onPress={handleDisconnectGsc}
+              >
+                <Ionicons name="log-out-outline" size={16} color={colors.error} />
+                <Text style={[styles.saveButtonText, { color: colors.error }]}>
+                  Disconnect
+                </Text>
+              </Pressable>
+            )}
+
+            <Text style={[styles.providerNote, { color: colors.textMuted }]}>
+              Create a project at console.cloud.google.com, enable Search Console API, and add your OAuth Client ID.
+            </Text>
+          </View>
         </View>
 
         {/* Appearance Section */}
