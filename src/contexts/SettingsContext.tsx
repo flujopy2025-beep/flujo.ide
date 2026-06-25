@@ -1,9 +1,11 @@
 /**
  * SettingsContext - Manages app settings state including
  * LLM provider API keys, theme preferences, and editor settings.
+ *
+ * Persistence: all changes are saved to AsyncStorage immediately.
  */
 
-import React, { createContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { AppSettings, LLMProvider } from '../types';
 import { getStorageService } from '../services/StorageService';
 import { useTheme } from '../hooks/useTheme';
@@ -15,9 +17,7 @@ export interface SettingsContextValue {
   addLLMProvider: (provider: LLMProvider) => void;
   updateLLMProvider: (id: string, updates: Partial<LLMProvider>) => void;
   removeLLMProvider: (id: string) => void;
-  /** Look up API key by provider type (e.g., 'openai', 'anthropic', 'google'). */
   getProviderAPIKey: (providerType: string) => string;
-  /** Look up a provider entry by type. Returns undefined if not found. */
   getProviderByType: (providerType: string) => LLMProvider | undefined;
   setActiveProvider: (id: string) => void;
 }
@@ -55,41 +55,50 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
   const { setThemeMode } = useTheme();
-  const storage = useMemo(() => getStorageService(), []);
+  const storageRef = useRef(getStorageService());
 
   // Load settings from storage on mount
   useEffect(() => {
-    const loadSettings = async () => {
+    const load = async () => {
       try {
-        const savedSettings = await storage.getSettings();
-        const savedProviders = await storage.getLLMProviders();
+        const storage = storageRef.current;
+        const [savedSettings, savedProviders] = await Promise.all([
+          storage.getSettings(),
+          storage.getLLMProviders(),
+        ]);
 
-        if (savedSettings) {
-          const merged = {
-            ...DEFAULT_SETTINGS,
-            ...savedSettings,
-            llmProviders: savedProviders.length > 0 ? savedProviders : savedSettings.llmProviders || [],
-          };
-          setSettings(merged);
+        const merged: AppSettings = {
+          ...DEFAULT_SETTINGS,
+          ...(savedSettings || {}),
+          llmProviders: savedProviders.length > 0 ? savedProviders : [],
+        };
+
+        setSettings(merged);
+        if (merged.theme) {
           setThemeMode(merged.theme);
         }
-      } catch {
-        // Use default settings on error
+      } catch (e) {
+        console.warn('[SettingsProvider] Failed to load settings:', e);
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadSettings();
-  }, [storage, setThemeMode]);
+    load();
+  }, [setThemeMode]);
 
-  const persistSettings = useCallback(
-    async (newSettings: AppSettings) => {
-      await storage.saveSettings(newSettings);
-      await storage.saveLLMProviders(newSettings.llmProviders);
-    },
-    [storage]
-  );
+  // Persist function — fire and forget but with logging
+  const persist = useCallback(async (newSettings: AppSettings) => {
+    const storage = storageRef.current;
+    try {
+      await Promise.all([
+        storage.saveSettings(newSettings),
+        storage.saveLLMProviders(newSettings.llmProviders),
+      ]);
+    } catch (e) {
+      console.warn('[SettingsProvider] Failed to persist:', e);
+    }
+  }, []);
 
   const updateSettings = useCallback(
     (partial: Partial<AppSettings>) => {
@@ -98,11 +107,12 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
         if (partial.theme) {
           setThemeMode(partial.theme);
         }
-        persistSettings(updated);
+        // Persist async
+        persist(updated);
         return updated;
       });
     },
-    [persistSettings, setThemeMode]
+    [persist, setThemeMode]
   );
 
   const addLLMProvider = useCallback(
@@ -112,11 +122,11 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
           ...prev,
           llmProviders: [...prev.llmProviders, provider],
         };
-        persistSettings(updated);
+        persist(updated);
         return updated;
       });
     },
-    [persistSettings]
+    [persist]
   );
 
   const updateLLMProvider = useCallback(
@@ -128,11 +138,11 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
             p.id === id ? { ...p, ...updates } : p
           ),
         };
-        persistSettings(updated);
+        persist(updated);
         return updated;
       });
     },
-    [persistSettings]
+    [persist]
   );
 
   const removeLLMProvider = useCallback(
@@ -143,11 +153,11 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
           llmProviders: prev.llmProviders.filter((p) => p.id !== id),
           activeProviderId: prev.activeProviderId === id ? undefined : prev.activeProviderId,
         };
-        persistSettings(updated);
+        persist(updated);
         return updated;
       });
     },
-    [persistSettings]
+    [persist]
   );
 
   const getProviderAPIKey = useCallback(
@@ -158,11 +168,6 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
     [settings.llmProviders]
   );
 
-  /**
-   * Look up a provider entry by type (e.g., 'openai', 'anthropic', 'google').
-   * Use this instead of searching by id to avoid coupling issues between
-   * provider.id (dynamic, e.g. 'openai-1719000000') and provider.type (static enum).
-   */
   const getProviderByType = useCallback(
     (providerType: string): LLMProvider | undefined => {
       return settings.llmProviders.find((p) => p.type === providerType);
@@ -174,11 +179,11 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
     (id: string) => {
       setSettings((prev) => {
         const updated = { ...prev, activeProviderId: id };
-        persistSettings(updated);
+        persist(updated);
         return updated;
       });
     },
-    [persistSettings]
+    [persist]
   );
 
   const value = useMemo<SettingsContextValue>(
