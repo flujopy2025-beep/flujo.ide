@@ -244,8 +244,21 @@ export function ChatProvider({ children }: ChatProviderProps) {
           return prev;
         });
       } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : 'An error occurred while sending the message';
+        let errorMessage = 'An error occurred while sending the message';
+        if (err instanceof Error) {
+          // Make error messages more user-friendly
+          if (err.message.includes('404')) {
+            errorMessage = `Model not found (404). The model "${selectedModel}" may not be available. Try selecting a different model.`;
+          } else if (err.message.includes('401')) {
+            errorMessage = 'Invalid API key (401). Please check your key in Settings.';
+          } else if (err.message.includes('429')) {
+            errorMessage = 'Rate limit exceeded (429). Please wait a moment and try again.';
+          } else if (err.message.includes('Network') || err.message.includes('fetch')) {
+            errorMessage = 'Network error. Please check your internet connection.';
+          } else {
+            errorMessage = err.message;
+          }
+        }
         setError(errorMessage);
 
         // Remove the empty assistant message on error

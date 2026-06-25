@@ -150,11 +150,16 @@ export default function SettingsScreen() {
     (type: 'openai' | 'anthropic' | 'google' | 'openrouter', key: string) => {
       const existing = settings.llmProviders.find((p) => p.type === type);
       const providerInfo = LLM_PROVIDERS.find((p) => p.id === type);
+      const baseUrl = type === 'openrouter' ? 'https://openrouter.ai/api/v1' : undefined;
 
       if (existing) {
-        updateLLMProvider(existing.id, { apiKey: key });
+        // Always update apiKey AND baseUrl (ensures OpenRouter URL is set even for old installs)
+        const updates: Partial<LLMProvider> = { apiKey: key.trim() };
+        if (baseUrl) {
+          updates.baseUrl = baseUrl;
+        }
+        updateLLMProvider(existing.id, updates);
       } else if (key.trim()) {
-        const baseUrl = type === 'openrouter' ? 'https://openrouter.ai/api/v1' : undefined;
         const newProvider: LLMProvider = {
           id: `${type}-${Date.now()}`,
           name: providerInfo?.name || type,
@@ -201,7 +206,7 @@ export default function SettingsScreen() {
       case 'openai': return 'GPT-4o, GPT-4o-mini, GPT-3.5';
       case 'anthropic': return 'Claude 3.5 Sonnet, Haiku, Opus';
       case 'google': return 'Gemini 1.5 Pro, Flash';
-      case 'openrouter': return 'Free & paid models (Gemma, DeepSeek, Llama)';
+      case 'openrouter': return 'Free models: Gemma 4, Llama 3.3, Qwen3, GPT-OSS';
       default: return '';
     }
   };
