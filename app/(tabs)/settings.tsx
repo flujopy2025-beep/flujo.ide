@@ -12,6 +12,7 @@ import {
   Pressable,
   TextInput,
   Switch,
+  Image,
   StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,14 +33,11 @@ interface ProviderKeyEntry {
 function SettingsLogo() {
   return (
     <View style={logoStyles.container}>
-      <View style={logoStyles.iconContainer}>
-        <View style={logoStyles.robotHead}>
-          <View style={logoStyles.eyeRow}>
-            <View style={logoStyles.eye} />
-            <View style={logoStyles.eye} />
-          </View>
-        </View>
-      </View>
+      <Image
+        source={require('../../assets/logo.png')}
+        style={logoStyles.image}
+        resizeMode="contain"
+      />
       <View style={logoStyles.textContainer}>
         <Text style={logoStyles.title}>Flujo IDE</Text>
         <Text style={logoStyles.subtitle}>Settings & Configuration</Text>
@@ -54,33 +52,10 @@ const logoStyles = StyleSheet.create({
     alignItems: 'center',
     gap: 14,
   },
-  iconContainer: {
+  image: {
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: '#161B22',
-    borderWidth: 1.5,
-    borderColor: BRAND_CYAN,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  robotHead: {
-    width: 28,
-    height: 22,
-    borderRadius: 8,
-    backgroundColor: '#0D1117',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  eyeRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  eye: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: BRAND_CYAN,
   },
   textContainer: {
     flex: 1,

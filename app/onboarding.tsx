@@ -7,6 +7,7 @@ import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
+  Image,
   Pressable,
   StyleSheet,
   Animated,
@@ -20,32 +21,14 @@ const { width } = Dimensions.get('window');
 const BRAND_CYAN = '#00D4FF';
 const BG_DARK = '#0D1117';
 
-function RobotLogo() {
+function AppLogo() {
   return (
     <View style={logoStyles.container}>
-      {/* Robot head */}
-      <View style={logoStyles.head}>
-        {/* Antenna */}
-        <View style={logoStyles.antenna} />
-        <View style={logoStyles.antennaBase} />
-        {/* Eyes */}
-        <View style={logoStyles.eyeRow}>
-          <View style={logoStyles.eye}>
-            <View style={logoStyles.eyeInner} />
-          </View>
-          <View style={logoStyles.eye}>
-            <View style={logoStyles.eyeInner} />
-          </View>
-        </View>
-        {/* Mouth */}
-        <View style={logoStyles.mouth} />
-      </View>
-      {/* Robot body */}
-      <View style={logoStyles.body}>
-        <View style={logoStyles.codeSymbol}>
-          <Text style={logoStyles.codeText}>{'< />'}</Text>
-        </View>
-      </View>
+      <Image
+        source={require('../assets/logo.png')}
+        style={logoStyles.image}
+        resizeMode="contain"
+      />
     </View>
   );
 }
@@ -53,86 +36,12 @@ function RobotLogo() {
 const logoStyles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
   },
-  head: {
-    width: 100,
-    height: 80,
-    backgroundColor: '#161B22',
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: '#30363D',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  antenna: {
-    width: 3,
-    height: 20,
-    backgroundColor: BRAND_CYAN,
-    position: 'absolute',
-    top: -20,
-  },
-  antennaBase: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: BRAND_CYAN,
-    position: 'absolute',
-    top: -25,
-  },
-  eyeRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 20,
-    marginTop: 4,
-  },
-  eye: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#0D1117',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  eyeInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: BRAND_CYAN,
-    shadowColor: BRAND_CYAN,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  mouth: {
-    width: 30,
-    height: 4,
-    backgroundColor: '#30363D',
-    borderRadius: 2,
-    marginTop: 12,
-  },
-  body: {
-    width: 80,
-    height: 50,
-    backgroundColor: '#161B22',
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#30363D',
-    marginTop: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  codeSymbol: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  codeText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: BRAND_CYAN,
-    fontFamily: 'monospace',
+  image: {
+    width: 150,
+    height: 150,
+    borderRadius: 24,
   },
 });
 
@@ -176,7 +85,7 @@ export default function OnboardingScreen() {
           },
         ]}
       >
-        <RobotLogo />
+        <AppLogo />
 
         {/* App Title */}
         <Text style={styles.title}>Flujo IDE</Text>
